@@ -1,0 +1,214 @@
+import { ComboBox, CheckBox, ScrollView } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+import { MenuEntry, FormField, ShortcutRow } from "types.slint";
+import { TipArea, ChipButton, Field } from "widgets.slint";
+
+export component ContextMenu inherits Rectangle {
+    in property <[MenuEntry]> entries;
+    in property <string> title;
+    in property <length> at-x;
+    in property <length> at-y;
+    in property <bool> open;
+    callback picked(string);
+    callback dismissed();
+    visible: open;
+    in property <length> menu-w: 300px;
+    property <length> menu-h: min(items.preferred-height, root.height - 12px);
+    TouchArea {
+        clicked => { root.dismissed(); }
+        pointer-event(e) => { if e.kind == PointerEventKind.down { root.dismissed(); } }
+    }
+    box := Rectangle {
+        x: min(root.at-x, root.width - root.menu-w - 8px);
+        y: min(root.at-y, max(4px, root.height - root.menu-h - 8px));
+        width: root.menu-w;
+        height: root.menu-h;
+        background: Theme.raised;
+        border-width: 1px;
+        border-color: Theme.line;
+        border-radius: 10px;
+        drop-shadow-blur: 24px;
+        drop-shadow-color: #00000090;
+        drop-shadow-offset-y: 6px;
+        TouchArea { }
+        Flickable {
+            x: 0;
+            y: 0;
+            width: parent.width;
+            height: parent.height;
+            viewport-height: items.preferred-height;
+            items := VerticalLayout {
+            width: root.menu-w;
+            padding: 5px;
+            spacing: 1px;
+            if root.title != "": Text {
+                text: root.title;
+                color: Theme.dim;
+                font-size: 11px;
+                font-family: Theme.ui-font;
+                overflow: elide;
+                height: 22px;
+                vertical-alignment: center;
+                x: 10px;
+                width: parent.width - 20px;
+            }
+            for e in root.entries: Rectangle {
+                height: e.separator ? 7px : 26px;
+                border-radius: 5px;
+                background: !e.separator && ita.has-hover && !e.disabled ? (e.danger ? Theme.bad.with-alpha(0.16) : Theme.hover) : transparent;
+                if e.separator: Rectangle { y: 3px; height: 1px; width: parent.width - 8px; x: 4px; background: Theme.line; }
+                if !e.separator: HorizontalLayout {
+                    padding-left: 10px;
+                    padding-right: 10px;
+                    Text {
+                        text: e.label;
+                        color: e.disabled ? Theme.dim : e.danger ? Theme.bad : Theme.text;
+                        font-size: Theme.font;
+                        font-family: Theme.ui-font;
+                        vertical-alignment: center;
+                        overflow: elide;
+                        horizontal-stretch: 1;
+                    }
+                    Text { text: e.key; color: Theme.dim; font-size: 11px; font-family: Theme.ui-font; vertical-alignment: center; visible: e.key != ""; }
+                }
+                ita := TipArea {
+                    tip: e.tip;
+                    enabled: !e.separator && !e.disabled;
+                    clicked => { root.picked(e.id); }
+                }
+            }
+            }
+        }
+    }
+}
+
+export component Dialog inherits Rectangle {
+    in property <bool> open;
+    in property <string> title;
+    in property <string> body;
+    in property <string> ok-label: "Continue";
+    in property <bool> danger: true;
+    in property <int> mode;
+    in property <string> placeholder;
+    in property <[FormField]> fields;
+    in-out property <string> prompt-text;
+    callback confirmed();
+    callback cancelled();
+    callback field-text(string, string);
+    callback field-select(string, int);
+    callback field-check(string, bool);
+    public function focus-prompt() { prompt.focus-it(); }
+    visible: open;
+    background: #00000080;
+    TouchArea { }
+    panel := Rectangle {
+        width: min(root.width - 40px, root.mode == 2 ? 620px : 520px);
+        height: card.preferred-height;
+        x: (root.width - self.width) / 2;
+        y: max(20px, (root.height - self.height) / 2 - 40px);
+        background: Theme.panel2;
+        border-width: 1px;
+        border-color: Theme.line;
+        border-radius: Theme.radius-lg;
+        drop-shadow-blur: 40px;
+        drop-shadow-color: #000000a0;
+        card := VerticalLayout {
+            padding: 18px;
+            spacing: 12px;
+            Text { text: root.title; color: Theme.text; font-size: 16px; font-weight: 700; font-family: Theme.ui-font; wrap: word-wrap; }
+            Text { text: root.body; color: Theme.muted; font-size: Theme.font; font-family: Theme.ui-font; wrap: word-wrap; visible: root.body != ""; }
+            prompt := Field {
+                height: root.mode == 1 ? 32px : 0px;
+                visible: root.mode == 1;
+                placeholder: root.placeholder;
+                text <=> root.prompt-text;
+                accepted => { root.confirmed(); }
+            }
+            if root.mode == 2: ScrollView {
+                height: min(fl.preferred-height, root.height - 240px);
+                viewport-height: fl.preferred-height;
+                fl := VerticalLayout {
+                width: panel.width - 36px;
+                spacing: 8px;
+                for f in root.fields: HorizontalLayout {
+                    spacing: 10px;
+                    Text { text: f.label; color: Theme.muted; font-size: Theme.font; font-family: Theme.ui-font; width: 140px; vertical-alignment: center; }
+                    if f.kind == 0: Field {
+                        height: 32px;
+                        text: f.value;
+                        placeholder: f.placeholder;
+                        enabled: !f.disabled;
+                        edited(t) => { root.field-text(f.key, t); }
+                        accepted => { root.confirmed(); }
+                    }
+                    if f.kind == 3: Field {
+                        height: 32px;
+                        secret: true;
+                        text: f.value;
+                        placeholder: f.placeholder;
+                        enabled: !f.disabled;
+                        edited(t) => { root.field-text(f.key, t); }
+                        accepted => { root.confirmed(); }
+                    }
+                    if f.kind == 1: ComboBox { model: f.options; current-index: f.selected; selected(t) => { root.field-select(f.key, self.current-index); } }
+                    if f.kind == 2: CheckBox { text: f.text; checked: f.checked; toggled => { root.field-check(f.key, self.checked); } }
+                }
+                }
+            }
+            HorizontalLayout {
+                alignment: end;
+                spacing: 8px;
+                ChipButton { text: "Cancel"; clicked => { root.cancelled(); } }
+                ChipButton { text: root.ok-label; danger: root.danger; primary: !root.danger; clicked => { root.confirmed(); } }
+            }
+        }
+    }
+}
+
+export component ShortcutsOverlay inherits Rectangle {
+    in property <bool> open;
+    in property <[ShortcutRow]> rows;
+    callback closed();
+    visible: open;
+    background: #000000a8;
+    TouchArea { clicked => { root.closed(); } }
+    Rectangle {
+        width: min(root.width - 40px, 560px);
+        height: min(root.height - 40px, card.preferred-height);
+        x: (root.width - self.width) / 2;
+        y: (root.height - self.height) / 2;
+        background: Theme.panel2;
+        border-width: 1px;
+        border-color: Theme.line;
+        border-radius: Theme.radius-lg;
+        TouchArea { }
+        card := VerticalLayout {
+            padding: 18px;
+            spacing: 6px;
+            HorizontalLayout {
+                Text { text: "Keyboard & mouse"; color: Theme.text; font-size: 16px; font-weight: 700; font-family: Theme.ui-font; horizontal-stretch: 1; vertical-alignment: center; }
+                ChipButton { text: "Close"; clicked => { root.closed(); } }
+            }
+            for r in root.rows: Rectangle {
+                height: r.label == "" ? 28px : 24px;
+                if r.label == "": Text { text: r.group; color: Theme.accent; font-size: 11px; font-weight: 700; letter-spacing: 0.6px; font-family: Theme.ui-font; x: 0; y: 10px; }
+                if r.label != "": HorizontalLayout {
+                    Text { text: r.label; color: Theme.muted; font-size: Theme.font; font-family: Theme.ui-font; vertical-alignment: center; horizontal-stretch: 1; }
+                    HorizontalLayout {
+                        spacing: 4px;
+                        alignment: end;
+                        for k in r.keys: Rectangle {
+                            width: kt.preferred-width + 14px;
+                            height: 20px;
+                            border-radius: 4px;
+                            background: Theme.panel2;
+                            border-width: 1px;
+                            border-color: Theme.line;
+                            kt := Text { text: k; color: Theme.text; font-size: 11px; font-weight: 600; font-family: Theme.ui-font; vertical-alignment: center; horizontal-alignment: center; }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

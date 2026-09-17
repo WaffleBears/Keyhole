@@ -1,0 +1,150 @@
+export struct Cell {
+    text: string,
+    tone: int,
+    dot: int,
+    mono: bool,
+    suffix: string,
+    bar: float,
+    bar-tone: int,
+}
+
+export struct Badge {
+    text: string,
+    kind: int,
+    tip: string,
+}
+
+export struct Row {
+    id: int,
+    cells: [Cell],
+    tone: int,
+    selected: bool,
+    indent: int,
+    twisty: int,
+    icon: image,
+    has-icon: bool,
+    badges: [Badge],
+    tip: string,
+}
+
+export struct Col {
+    id: string,
+    title: string,
+    x: length,
+    width: length,
+    num: bool,
+    sortable: bool,
+    tip: string,
+}
+
+export struct Chip {
+    id: string,
+    label: string,
+    count: string,
+    tip: string,
+}
+
+export struct MenuEntry {
+    id: string,
+    label: string,
+    key: string,
+    tip: string,
+    danger: bool,
+    disabled: bool,
+    separator: bool,
+}
+
+export struct DocItem {
+    kind: int,
+    key: string,
+    value: string,
+    tip: string,
+    tone: int,
+    badge: string,
+    badge-kind: int,
+    badges: [Badge],
+    pct: float,
+    sub: string,
+    sub2: string,
+    id: string,
+    id2: string,
+    jump: int,
+}
+
+export struct BoardRow {
+    rank: string,
+    pid: int,
+    path: string,
+    label: string,
+    who: string,
+    sub: string,
+    read: string,
+    write: string,
+    total: string,
+    spark: string,
+    spark-fill: string,
+    tip: string,
+    on: bool,
+}
+
+export struct BarRow {
+    label: string,
+    value: string,
+    sub: string,
+    fraction: float,
+    tone: int,
+    tip: string,
+}
+
+export struct Metric {
+    label: string,
+    value: string,
+    tone: int,
+}
+
+export struct Pill {
+    id: string,
+    text: string,
+    ok: bool,
+    clickable: bool,
+    tip: string,
+}
+
+export struct StatusPart {
+    bold: string,
+    text: string,
+    tip: string,
+}
+
+export struct Toast {
+    id: int,
+    text: string,
+    kind: int,
+}
+
+export struct FormField {
+    key: string,
+    label: string,
+    kind: int,
+    value: string,
+    placeholder: string,
+    options: [string],
+    option-ids: [string],
+    selected: int,
+    checked: bool,
+    text: string,
+    required: bool,
+    disabled: bool,
+}
+
+export struct TabInfo {
+    id: string,
+    label: string,
+    tip: string,
+}
+
+export struct ShortcutRow {
+    group: string,
+    label: string,
+    keys: [string],
+}

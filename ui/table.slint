@@ -1,0 +1,201 @@
+import { ListView, ScrollView } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+import { Cell, Row, Col } from "types.slint";
+import { TipArea, BadgeView } from "widgets.slint";
+
+export component Table inherits Rectangle {
+    in property <[Col]> cols;
+    in property <[Row]> rows;
+    in property <length> fixed-total;
+    in property <string> sort-key;
+    in property <bool> sort-desc;
+    in property <bool> tree-mode;
+    in property <bool> header-visible: true;
+    in property <int> scroll-index;
+    in property <int> scroll-seq;
+    changed scroll-seq => { root.scroll-to(root.scroll-index); }
+    callback sort(string);
+    callback resize(int, length);
+    callback resized-done();
+    callback clicked(int);
+    callback double-clicked(int);
+    callback right-clicked(int, length, length);
+    callback twisty-clicked(int);
+    callback header-right-clicked(length, length);
+    property <length> row-h: Theme.row;
+    property <length> last-col: root.cols.length > 0 ? root.cols[root.cols.length - 1].width : 0px;
+    property <length> content-w: max(root.width, root.fixed-total + root.last-col + 14px);
+    property <length> last-w: max(root.last-col, root.content-w - root.fixed-total - 14px);
+    property <length> start-w;
+
+    public function scroll-to(index: int) {
+        if index * row-h < -list.viewport-y {
+            list.viewport-y = -index * row-h;
+        } else if (index + 1) * row-h > -list.viewport-y + list.visible-height {
+            list.viewport-y = -((index + 1) * row-h - list.visible-height);
+        }
+    }
+    public function scroll-top() { list.viewport-y = 0; }
+
+    pure function col-w(i: int) -> length {
+        i == root.cols.length - 1 ? root.last-w : root.cols[i].width
+    }
+
+    background: transparent;
+    clip: true;
+    min-width: 0px;
+    preferred-width: 0px;
+    sv := ScrollView {
+        viewport-width: root.content-w;
+        viewport-height: self.visible-height;
+        VerticalLayout {
+        width: root.content-w;
+        height: sv.visible-height;
+        if root.header-visible: Rectangle {
+            height: 32px;
+            background: Theme.head;
+            Rectangle { y: parent.height - 1px; height: 1px; width: parent.width; background: Theme.line; }
+            for c[i] in root.cols: Rectangle {
+                    x: c.x;
+                    width: root.col-w(i);
+                    height: parent.height;
+                    Text {
+                        x: 10px;
+                        width: parent.width - 20px;
+                        text: c.title + (root.sort-key != "" && c.id == root.sort-key ? (root.sort-desc ? "  ▼" : "  ▲") : "");
+                        color: c.id == root.sort-key && root.sort-key != "" ? Theme.accent : Theme.dim;
+                        font-size: 11px;
+                        font-family: Theme.ui-font;
+                        font-weight: 600;
+                        letter-spacing: 0.4px;
+                        vertical-alignment: center;
+                        horizontal-alignment: c.num ? right : left;
+                        overflow: elide;
+                    }
+                    hta := TipArea {
+                        tip: c.tip;
+                        mouse-cursor: c.sortable ? pointer : default;
+                        clicked => { if c.sortable { root.sort(c.id); } }
+                        pointer-event(e) => {
+                            if e.kind == PointerEventKind.down && e.button == PointerEventButton.right {
+                                root.header-right-clicked(self.absolute-position.x + self.mouse-x, self.absolute-position.y + self.mouse-y);
+                            }
+                        }
+                    }
+                    Rectangle {
+                        x: parent.width - 3px;
+                        width: 6px;
+                        height: parent.height;
+                        background: rz.has-hover || rz.pressed ? Theme.sel-edge : transparent;
+                        rz := TouchArea {
+                            mouse-cursor: col-resize;
+                            pointer-event(e) => {
+                                if e.kind == PointerEventKind.down { root.start-w = c.width; }
+                                if e.kind == PointerEventKind.up { root.resized-done(); }
+                            }
+                            moved => { root.resize(i, max(44px, root.start-w + self.mouse-x - self.pressed-x)); }
+                        }
+                    }
+            }
+        }
+        list := ListView {
+            for r[index] in root.rows: Rectangle {
+                height: root.row-h;
+                background: r.selected ? Theme.sel : r.tone == 3 ? Theme.good.with-alpha(0.13) : r.tone == 2 ? Theme.bad.with-alpha(0.10) : r.tone == 4 ? Theme.blue.with-alpha(0.07) : rta.has-hover ? Theme.hover : transparent;
+                animate background { duration: 300ms; }
+                Rectangle { x: 0; width: 3px; height: parent.height; background: r.selected ? Theme.accent : transparent; }
+                Rectangle { y: parent.height - 1px; height: 1px; width: parent.width; background: Theme.line-soft; }
+                rta := TipArea {
+                    tip: r.tip;
+                    clicked => { root.clicked(index); }
+                    double-clicked => { root.double-clicked(index); }
+                    pointer-event(e) => {
+                        if e.kind == PointerEventKind.down && e.button == PointerEventButton.right {
+                            root.right-clicked(index, self.absolute-position.x + self.mouse-x, self.absolute-position.y + self.mouse-y);
+                        }
+                    }
+                }
+                for c[i] in r.cells: Rectangle {
+                        x: root.cols[i].x;
+                        width: root.col-w(i);
+                        height: parent.height;
+                        clip: true;
+                        if c.bar >= 0.04: Rectangle {
+                            width: parent.width - 8px;
+                            x: 4px;
+                            y: parent.height - 7px;
+                            height: 3px;
+                            border-radius: 1.5px;
+                            background: Theme.tone-color(c.bar-tone == 0 ? 5 : c.bar-tone).with-alpha(0.10);
+                        }
+                        if c.bar >= 0.04: Rectangle {
+                            width: (parent.width - 8px) * min(1.0, c.bar);
+                            x: 4px;
+                            y: parent.height - 7px;
+                            height: 3px;
+                            border-radius: 1.5px;
+                            background: Theme.tone-color(c.bar-tone == 0 ? 5 : c.bar-tone).with-alpha(0.55);
+                        }
+                        HorizontalLayout {
+                            padding-left: 10px + (i == 0 && root.tree-mode ? r.indent * 16px : 0px);
+                            padding-right: 10px;
+                            spacing: 5px;
+                            alignment: root.cols[i].num ? end : start;
+                            if i == 0 && root.tree-mode: Rectangle {
+                                width: 14px;
+                                Text {
+                                    text: r.twisty == 1 ? "\u{E76C}" : r.twisty == 2 ? "\u{E70D}" : "";
+                                    color: tw.has-hover ? Theme.text : Theme.dim;
+                                    font-size: 9px;
+                                    font-family: Theme.icons;
+                                    vertical-alignment: center;
+                                    horizontal-alignment: center;
+                                    width: parent.width;
+                                    height: parent.height;
+                                }
+                                tw := TouchArea { enabled: r.twisty > 0; clicked => { root.twisty-clicked(index); } }
+                            }
+                            if i == 0 && root.tree-mode && r.has-icon: Image {
+                                source: r.icon;
+                                width: 16px;
+                                height: 16px;
+                                y: (parent.height - 16px) / 2;
+                                image-fit: contain;
+                            }
+                            if c.dot > 0: Text {
+                                text: "●";
+                                color: Theme.tone-color(c.dot);
+                                font-size: 9px;
+                                vertical-alignment: center;
+                            }
+                            Text {
+                                text: c.text;
+                                color: r.tone == 2 ? Theme.bad.with-alpha(0.7) : r.tone == 1 ? Theme.dim : Theme.tone-color(c.tone);
+                                font-size: Theme.font;
+                                font-family: c.mono ? Theme.mono : Theme.ui-font;
+                                vertical-alignment: center;
+                                horizontal-alignment: root.cols[i].num ? right : left;
+                                overflow: elide;
+                                max-width: parent.width;
+                            }
+                            if c.suffix != "": Text {
+                                text: c.suffix;
+                                color: Theme.dim;
+                                font-size: Theme.small;
+                                font-family: Theme.ui-font;
+                                vertical-alignment: center;
+                                min-width: min(self.preferred-width, parent.width * 0.4);
+                                overflow: elide;
+                            }
+                            if i == 0: HorizontalLayout {
+                                spacing: 4px;
+                                alignment: start;
+                                for b in r.badges: BadgeView { badge: b; y: (parent.height - self.height) / 2; }
+                            }
+                        }
+                }
+            }
+        }
+        }
+    }
+}

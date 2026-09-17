@@ -1,0 +1,75 @@
+import { Theme } from "theme.slint";
+import { TipArea } from "widgets.slint";
+
+export component AreaChart inherits Rectangle {
+    in property <string> line-path;
+    in property <string> fill-path;
+    in property <color> line-color: Theme.blue;
+    in property <length> line-width: 1.5px;
+    in property <float> fill-alpha: 0.18;
+    clip: true;
+    Path {
+        x: 0;
+        y: 0;
+        width: 100%;
+        height: 100%;
+        visible: root.fill-path != "";
+        viewbox-x: 0;
+        viewbox-y: 0;
+        viewbox-width: 100;
+        viewbox-height: 100;
+        fit: fill;
+        commands: root.fill-path;
+        fill: root.line-color.with-alpha(root.fill-alpha);
+        stroke-width: 0px;
+    }
+    Path {
+        x: 0;
+        y: 0;
+        width: 100%;
+        height: 100%;
+        visible: root.line-path != "";
+        viewbox-x: 0;
+        viewbox-y: 0;
+        viewbox-width: 100;
+        viewbox-height: 100;
+        fit: fill;
+        commands: root.line-path;
+        stroke: root.line-color;
+        stroke-width: root.line-width;
+    }
+}
+
+export component Timeline inherits Rectangle {
+    in property <string> read-path;
+    in property <string> read-fill;
+    in property <string> write-path;
+    in property <string> write-fill;
+    in property <string> scale-text;
+    in property <string> read-label: "read";
+    in property <string> write-label: "write";
+    in property <string> tip;
+    height: 110px;
+    background: Theme.panel;
+    border-width: 1px;
+    border-color: Theme.line;
+    border-radius: Theme.radius-lg;
+    clip: true;
+    Rectangle { x: 12px; y: root.height * 0.36; height: 1px; width: root.width - 24px; background: Theme.line-soft; }
+    Rectangle { x: 12px; y: root.height * 0.64; height: 1px; width: root.width - 24px; background: Theme.line-soft; }
+    AreaChart { x: 12px; y: 22px; width: root.width - 24px; height: root.height - 30px; line-path: root.write-path; fill-path: root.write-fill; line-color: Theme.warn; fill-alpha: 0.22; line-width: 1.6px; }
+    AreaChart { x: 12px; y: 22px; width: root.width - 24px; height: root.height - 30px; line-path: root.read-path; fill-path: root.read-fill; line-color: Theme.blue; fill-alpha: 0.26; line-width: 1.6px; }
+    Text { x: 12px; y: 6px; text: root.scale-text; color: Theme.dim; font-size: 10.5px; font-family: Theme.ui-font; }
+    HorizontalLayout {
+        x: 0;
+        y: 6px;
+        width: root.width - 12px;
+        height: 14px;
+        alignment: end;
+        spacing: 12px;
+        HorizontalLayout { spacing: 5px; Rectangle { width: 8px; height: 8px; y: 3px; background: Theme.blue; border-radius: 4px; } Text { text: root.read-label; color: Theme.muted; font-size: 10.5px; font-family: Theme.ui-font; } }
+        HorizontalLayout { spacing: 5px; Rectangle { width: 8px; height: 8px; y: 3px; background: Theme.warn; border-radius: 4px; } Text { text: root.write-label; color: Theme.muted; font-size: 10.5px; font-family: Theme.ui-font; } }
+        Text { text: "last 90 seconds"; color: Theme.dim; font-size: 10.5px; font-family: Theme.ui-font; }
+    }
+    TipArea { tip: root.tip; }
+}

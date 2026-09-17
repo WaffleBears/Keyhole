@@ -1,0 +1,82 @@
+[package]
+name = "keyhole"
+version = "1.1.8"
+edition = "2024"
+description = "Windows server admin console: processes, handles, services, tasks, events, crashes, shares, users, updates, certificates, network and live kernel tracing in one elevated exe"
+
+[dependencies]
+arc-swap = "1.9.2"
+parking_lot = "0.12.5"
+png = "0.18.1"
+sha2 = "0.10"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+windows = { version = "0.62.2", features = [
+    "Win32_Foundation",
+    "Win32_System_Threading",
+    "Win32_System_ProcessStatus",
+    "Win32_System_Diagnostics_Etw",
+    "Win32_Security",
+    "Win32_Security_Authorization",
+    "Win32_Security_WinTrust",
+    "Win32_Security_Cryptography",
+    "Win32_Security_Cryptography_Catalog",
+    "Win32_Storage_FileSystem",
+    "Win32_NetworkManagement_IpHelper",
+    "Win32_Networking_WinSock",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_UI_Shell",
+    "Win32_Graphics_Gdi",
+    "Win32_System_LibraryLoader",
+    "Win32_System_SystemInformation",
+    "Win32_System_Memory",
+    "Win32_System_Com",
+    "Win32_System_TaskScheduler",
+    "Win32_System_RemoteDesktop",
+    "Win32_NetworkManagement_WindowsFirewall",
+    "Win32_System_Ole",
+    "Win32_System_Variant",
+    "Win32_System_Kernel",
+    "Win32_System_IO",
+    "Win32_System_Ioctl",
+    "Win32_System_Diagnostics_Debug",
+    "Win32_System_Services",
+    "Win32_System_EventLog",
+    "Win32_NetworkManagement_NetManagement",
+    "Win32_Networking_ActiveDirectory",
+    "Win32_System_UpdateAgent",
+    "Win32_Networking_HttpServer",
+    "Win32_Storage_IscsiDisc",
+    "Win32_NetworkManagement_Dns",
+    "Win32_System_Registry",
+    "Win32_System_Environment",
+    "Win32_System_Performance",
+    "Win32_System_Time",
+    "Win32_Globalization",
+    "Win32_Graphics_Dwm",
+    "Win32_UI_Controls_Dialogs",
+    "Win32_System_DataExchange",
+    "Win32_System_Console",
+    "Win32_System_Pipes",
+    "Win32_UI_HiDpi",
+    "Win32_Storage_Xps",
+    "Win32_NetworkManagement_WNet",
+    "Win32_NetworkManagement_Ndis",
+    "Win32_System_Diagnostics_ToolHelp",
+] }
+slint = { version = "1.17.1", default-features = false, features = ["std", "backend-winit", "renderer-skia", "renderer-software", "software-renderer-systemfonts", "compat-1-2", "raw-window-handle-06"] }
+raw-window-handle = "0.6"
+minidump = "0.27"
+minidump-processor = "0.27"
+minidump-unwind = { version = "0.27", features = ["debuginfo-unwind"] }
+
+[build-dependencies]
+embed-resource = "3.0.11"
+slint-build = "1.17.1"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+panic = "unwind"
+strip = true

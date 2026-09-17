@@ -1,0 +1,49 @@
+export global Theme {
+    out property <color> bg: #0f1115;
+    out property <color> rail: #0c0e12;
+    out property <color> panel: #161a21;
+    out property <color> panel2: #1b2029;
+    out property <color> raised: #20262f;
+    out property <color> head: #12161c;
+    out property <color> line: #262c36;
+    out property <color> line-soft: #ffffff0a;
+    out property <color> text: #f1f3f7;
+    out property <color> muted: #a3acba;
+    out property <color> dim: #6e7887;
+    out property <color> accent: #f5b942;
+    out property <color> accent-dim: #8a6520;
+    out property <color> accent-soft: #f5b94222;
+    out property <color> sel: #24304a;
+    out property <color> sel-edge: #4f83d1;
+    out property <color> hover: #ffffff0b;
+    out property <color> blue: #5ab0f5;
+    out property <color> good: #3fd18a;
+    out property <color> warn: #f0b13a;
+    out property <color> bad: #f26d6d;
+    out property <color> chip: #ffffff08;
+    out property <color> chip-on: #f5b94224;
+    out property <color> control: #ffffff0b;
+    out property <color> control-line: #ffffff16;
+    out property <color> control-hover: #ffffff16;
+    out property <length> row: 30px;
+    out property <length> font: 13px;
+    out property <length> small: 12px;
+    out property <length> radius: 8px;
+    out property <length> radius-lg: 12px;
+    out property <string> ui-font: "Segoe UI";
+    out property <string> mono: "Consolas";
+    out property <string> icons: "Segoe MDL2 Assets";
+
+    pure public function tone-color(tone: int) -> color {
+        tone == 1 ? dim : tone == 2 ? good : tone == 3 ? warn : tone == 4 ? bad : tone == 5 ? blue : tone == 6 ? accent : tone == 7 ? muted : text
+    }
+}
+
+export global Tips {
+    in-out property <string> text;
+    in-out property <length> x;
+    in-out property <length> y;
+    in-out property <bool> shown;
+    callback hover(string, length, length);
+    callback leave();
+}
