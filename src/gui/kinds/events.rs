@@ -68,6 +68,7 @@ pub static KIND: Kind = Kind {
     refresh,
     render,
     menu,
+    multi: None,
     double,
     button,
     csv: export_csv,

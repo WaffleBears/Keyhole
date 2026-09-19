@@ -1,10 +1,10 @@
-use super::{Kind, RenderInput, Rendered, refresh_after};
+use super::{Kind, RenderInput, Rendered, plural, refresh_after};
 use crate::gui::columns::{ColDef, c};
 use crate::gui::format::*;
 use crate::gui::lists::{ListData, ListState, nothing_matches};
 use crate::gui::menus::{self, MenuItem};
 use crate::gui::rows::{cell, dot_cell, num, simple_row, sort_indices, suffix_cell, sv_n, sv_s};
-use crate::gui::simple_action;
+use crate::gui::{batch_action, simple_action};
 use crate::gui::{Shared, chip, copy_text, dialogs};
 use crate::Chip;
 use keyhole::api::{self, Action};
@@ -42,6 +42,7 @@ pub static KIND: Kind = Kind {
     refresh,
     render,
     menu,
+    multi: Some(multi),
     double,
     button,
     csv: export_csv,
@@ -206,4 +207,42 @@ fn button(ctx: &Shared, id: &str) {
 fn export_csv(data: &ListData, shown: &[usize], _st: &ListState) -> Option<(&'static str, String)> {
     let ListData::Services(l) = data else { return None };
     Some(("keyhole-services", csv(&shown.iter().map(|&i| { let r = &l[i]; vec![r.display.clone(), r.name.clone(), r.state.clone(), r.start_type.clone(), if r.pid > 0 { r.pid.to_string() } else { String::new() }, r.account.clone(), r.kind.clone(), r.binary.clone(), r.exe.clone(), r.depends_on.join("; "), r.description.clone()] }).collect::<Vec<_>>(), &["Display name", "Service", "State", "Start type", "PID", "Log on as", "Type", "Path", "Executable", "Depends on", "Description"])))
+}
+
+fn multi(ctx: &Shared, srcs: &[usize], x: f32, y: f32) {
+    let rows: Vec<ServiceRow> = {
+        let st = ctx.st.borrow();
+        let ListData::Services(list) = &st.lists.data else { return };
+        srcs.iter().filter_map(|&i| list.get(i).cloned()).collect()
+    };
+    if rows.is_empty() {
+        return;
+    }
+    let n = rows.len();
+    let acts = |pick: fn(&ServiceRow) -> bool, op: &'static str| -> Vec<(String, Action)> {
+        rows.iter().filter(|r| pick(r)).map(|r| (r.display.clone(), Action::Service { name: r.name.clone(), op: op.into() })).collect()
+    };
+    let names = rows.iter().take(6).map(|r| r.display.clone()).collect::<Vec<_>>();
+    let listing = if n > 6 { format!("{} and {} more", names.join(", "), n - 6) } else { names.join(", ") };
+    let start = acts(|r| r.state != "Running" && r.state != "Paused", "start");
+    let stop = acts(|r| r.state == "Running" || r.state == "Paused", "stop");
+    let restart = acts(|r| r.state == "Running", "restart");
+    let confirm = |title: String, body: String, ok: &'static str, verb: &'static str, acts: Vec<(String, Action)>| {
+        move |ctx: &Shared| {
+            let acts = acts.clone();
+            dialogs::confirm(ctx, &title, &body, ok, true, Box::new(move |ctx| batch_action(ctx, acts, verb, ("service", "services"), refresh_after("services"))));
+        }
+    };
+    let items = vec![
+        MenuItem::new("start", &format!("Start {}", plural(start.len(), "service", "services")), { let a = start.clone(); move |ctx| batch_action(ctx, a, "Started", ("service", "services"), refresh_after("services")) }).disabled(start.is_empty()),
+        MenuItem::new("stop", &format!("Stop {}", plural(stop.len(), "service", "services")), confirm("Stop services?".into(), format!("This stops {} now: {}. Anything depending on them may stop working.", plural(stop.len(), "service", "services"), listing), "Stop", "Stopped", stop.clone())).danger().disabled(stop.is_empty()),
+        MenuItem::new("restart", &format!("Restart {}", plural(restart.len(), "service", "services")), confirm("Restart services?".into(), format!("This stops and restarts {}: {}.", plural(restart.len(), "service", "services"), listing), "Restart", "Restarted", restart.clone())).danger().disabled(restart.is_empty()),
+        MenuItem::sep(),
+        MenuItem::new("auto", "Set start type: Automatic", { let a = acts(|_| true, "enableAuto"); move |ctx| batch_action(ctx, a, "Set to automatic", ("service", "services"), refresh_after("services")) }),
+        MenuItem::new("manual", "Set start type: Manual", { let a = acts(|_| true, "enableManual"); move |ctx| batch_action(ctx, a, "Set to manual", ("service", "services"), refresh_after("services")) }),
+        MenuItem::new("disable", "Set start type: Disabled", confirm("Disable services?".into(), format!("This sets {} to Disabled so they will not start at boot: {}.", plural(n, "service", "services"), listing), "Disable", "Disabled", acts(|_| true, "disable"))).danger(),
+        MenuItem::sep(),
+        MenuItem::new("copy", "Copy service names", { let v = rows.iter().map(|r| r.name.clone()).collect::<Vec<_>>().join("\n"); move |ctx| copy_text(ctx, &v) }),
+    ];
+    menus::show(ctx, x, y, &format!("{} selected", plural(n, "service", "services")), items);
 }

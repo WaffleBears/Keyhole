@@ -1,6 +1,6 @@
 use super::{Shared, ss};
 use crate::Col;
-use slint::ModelRc;
+use slint::{Model, ModelRc};
 
 #[derive(Clone, Copy)]
 pub struct ColDef {
@@ -98,7 +98,7 @@ fn fit(defs: &[ColDef], widths: &mut [f32], pinned: &[bool], available: f32) {
     }
 }
 
-pub fn build(ctx: &Shared, table: &str, defs: &[ColDef]) -> (ModelRc<Col>, f32) {
+pub fn build(ctx: &Shared, table: &str, defs: &[ColDef], existing: ModelRc<Col>) -> (ModelRc<Col>, f32) {
     let mut widths: Vec<f32> = defs.iter().map(|d| width_of(ctx, table, d)).collect();
     let pinned: Vec<bool> = {
         let s = ctx.settings.borrow();
@@ -114,6 +114,15 @@ pub fn build(ctx: &Shared, table: &str, defs: &[ColDef]) -> (ModelRc<Col>, f32) 
         if i < defs.len() - 1 {
             x += w;
         }
+    }
+    let same_shape = existing.row_count() == cols.len() && cols.iter().enumerate().all(|(i, c)| existing.row_data(i).map(|e| e.id == c.id).unwrap_or(false));
+    if same_shape {
+        for (i, c) in cols.into_iter().enumerate() {
+            if existing.row_data(i).map(|e| e != c).unwrap_or(true) {
+                existing.set_row_data(i, c);
+            }
+        }
+        return (existing, x);
     }
     (super::model(cols), x)
 }

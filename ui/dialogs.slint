@@ -112,6 +112,12 @@ export component Dialog inherits Rectangle {
         border-radius: Theme.radius-lg;
         drop-shadow-blur: 40px;
         drop-shadow-color: #000000a0;
+        FocusScope {
+            key-pressed(e) => {
+                if e.text == Key.Escape { root.cancelled(); return accept; }
+                if e.text == Key.Return { root.confirmed(); return accept; }
+                reject
+            }
         card := VerticalLayout {
             padding: 18px;
             spacing: 12px;
@@ -161,6 +167,7 @@ export component Dialog inherits Rectangle {
                 ChipButton { text: "Cancel"; clicked => { root.cancelled(); } }
                 ChipButton { text: root.ok-label; danger: root.danger; primary: !root.danger; clicked => { root.confirmed(); } }
             }
+        }
         }
     }
 }

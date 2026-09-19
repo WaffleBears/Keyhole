@@ -364,7 +364,7 @@ fn read_peb32_cwd(h: HANDLE) -> Option<String> {
         if ReadProcessMemory(h, (params as usize + 0x24) as *const c_void, dos.as_mut_ptr() as *mut c_void, 8, None).is_err() {
             return None;
         }
-        let length = u16::from_le_bytes([dos[0], dos[1]]) as usize;
+        let length = (u16::from_le_bytes([dos[0], dos[1]]) as usize) & !1;
         let buffer = u32::from_le_bytes([dos[4], dos[5], dos[6], dos[7]]) as usize;
         if length == 0 || length > 32768 || buffer == 0 {
             return None;
@@ -434,16 +434,17 @@ fn read_peb_strings(h: HANDLE) -> Option<String> {
 }
 
 fn read_unicode_string(h: HANDLE, us: &UNICODE_STRING) -> String {
-    if us.Buffer.is_null() || us.Length == 0 || us.Length > 32768 {
+    let length = (us.Length & !1) as usize;
+    if us.Buffer.is_null() || length == 0 || length > 32768 {
         return String::new();
     }
-    let mut buf = vec![0u16; (us.Length / 2) as usize];
+    let mut buf = vec![0u16; length / 2];
     let ok = unsafe {
         ReadProcessMemory(
             h,
             us.Buffer as *const c_void,
             buf.as_mut_ptr() as *mut c_void,
-            us.Length as usize,
+            length,
             None,
         )
     }

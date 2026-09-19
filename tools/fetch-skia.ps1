@@ -3,9 +3,18 @@ $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 $dest = Join-Path $root "skia"
 
+function Locked-Version {
+    $lock = Join-Path $root "Cargo.lock"
+    if (-not (Test-Path $lock)) { return $null }
+    $m = [regex]::Match((Get-Content $lock -Raw), 'name = "skia-bindings"\r?\nversion = "([^"]+)"')
+    if ($m.Success) { $m.Groups[1].Value } else { $null }
+}
+
 function Find-Crate {
-    Get-ChildItem "$env:USERPROFILE\.cargo\registry\src\index.crates.io-*\skia-bindings-*" -Directory -ErrorAction SilentlyContinue |
-        Sort-Object Name -Descending | Select-Object -First 1
+    $wanted = Locked-Version
+    $dirs = Get-ChildItem "$env:USERPROFILE\.cargo\registry\src\index.crates.io-*\skia-bindings-*" -Directory -ErrorAction SilentlyContinue
+    if ($wanted) { $dirs = $dirs | Where-Object { $_.Name -eq "skia-bindings-$wanted" } }
+    $dirs | Sort-Object Name -Descending | Select-Object -First 1
 }
 
 $crate = Find-Crate
@@ -27,9 +36,13 @@ if (-not $Force -and (Test-Path $stamp) -and ((Get-Content $stamp -Raw).Trim() -
 Write-Host "$($crate.Name) wants Skia $tag"
 if (Test-Path $dest) { Remove-Item -Recurse -Force $dest }
 $tar = Join-Path $env:TEMP "skia-$tag.tar.gz"
+if ($Force -and (Test-Path $tar)) { Remove-Item -Force $tar }
 if (-not (Test-Path $tar)) {
     Write-Host "Downloading Skia $tag"
-    Invoke-WebRequest -Uri "https://codeload.github.com/rust-skia/skia/tar.gz/$tag" -OutFile $tar
+    $partial = "$tar.partial"
+    if (Test-Path $partial) { Remove-Item -Force $partial }
+    Invoke-WebRequest -Uri "https://codeload.github.com/rust-skia/skia/tar.gz/$tag" -OutFile $partial
+    Move-Item -Force $partial $tar
 }
 
 $py = @'
@@ -67,7 +80,10 @@ $script = Join-Path $env:TEMP "unpack-skia.py"
 Set-Content -Path $script -Value $py -Encoding UTF8
 Write-Host "Unpacking into $dest"
 python $script $tar $dest
-if ($LASTEXITCODE -ne 0) { throw "unpacking Skia failed" }
+if ($LASTEXITCODE -ne 0) {
+    Remove-Item -Force $tar -ErrorAction SilentlyContinue
+    throw "unpacking Skia failed; the downloaded archive was discarded, run again to fetch it afresh"
+}
 
 Write-Host "Syncing Skia third-party dependencies"
 $env:GIT_CONFIG_COUNT = "1"

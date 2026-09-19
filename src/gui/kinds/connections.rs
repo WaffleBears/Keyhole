@@ -1,10 +1,10 @@
-use super::{Kind, RenderInput, Rendered};
+use super::{Kind, RenderInput, Rendered, plural};
 use crate::gui::format::*;
 use crate::gui::columns::{ColDef, c};
 use crate::gui::lists::{self, ListData, ListState};
 use crate::gui::menus::{self, MenuItem};
 use crate::gui::rows::{cell, hexc, num, simple_row, sort_indices, suffix_cell, sv_n, sv_s};
-use crate::gui::{Shared, chip, copy_text};
+use crate::gui::{Shared, batch_action, chip, copy_text, dialogs};
 use crate::{Chip, Row};
 use keyhole::state::App;
 
@@ -37,6 +37,7 @@ pub static KIND: Kind = Kind {
     refresh,
     render,
     menu,
+    multi: Some(multi),
     double,
     button,
     csv: export_csv,
@@ -168,4 +169,32 @@ fn button(ctx: &Shared, id: &str) {
 fn export_csv(data: &ListData, shown: &[usize], _st: &ListState) -> Option<(&'static str, String)> {
     let ListData::Connections(c) = data else { return None };
     Some(("keyhole-connections", csv(&shown.iter().map(|&i| { let r = &c.rows[i]; vec![r.process.clone(), r.pid.to_string(), r.proto.clone(), r.local.clone(), r.remote.clone(), r.remote_host.clone(), r.state.clone()] }).collect::<Vec<_>>(), &["Process", "PID", "Protocol", "Local", "Remote", "Remote host", "State"])))
+}
+
+fn multi(ctx: &Shared, srcs: &[usize], x: f32, y: f32) {
+    let rows: Vec<keyhole::model::EndpointRow> = {
+        let st = ctx.st.borrow();
+        let ListData::Connections(c) = &st.lists.data else { return };
+        srcs.iter().filter_map(|&i| c.rows.get(i).cloned()).collect()
+    };
+    if rows.is_empty() {
+        return;
+    }
+    let n = rows.len();
+    let closable: Vec<(String, keyhole::api::Action)> = rows.iter().filter(|d| d.proto == "TCP" && d.state == "ESTABLISHED").map(|d| (format!("{} → {}", d.local, d.remote), keyhole::api::Action::CloseConnection { local: d.local.clone(), remote: d.remote.clone() })).collect();
+    let items = vec![
+        MenuItem::new("cr", "Copy remote addresses", { let v = rows.iter().filter(|r| !r.remote.is_empty()).map(|r| r.remote.clone()).collect::<Vec<_>>().join("\n"); move |ctx| copy_text(ctx, &v) }),
+        MenuItem::new("cl", "Copy local addresses", { let v = rows.iter().map(|r| r.local.clone()).collect::<Vec<_>>().join("\n"); move |ctx| copy_text(ctx, &v) }),
+        MenuItem::sep(),
+        MenuItem::new("close", &format!("Close {}", plural(closable.len(), "connection", "connections")), {
+            let a = closable.clone();
+            move |ctx| {
+                let a = a.clone();
+                dialogs::confirm(ctx, "Close connections?", &format!("This forcibly tears down {}. The owning programs are not told and may error.", plural(a.len(), "established TCP connection", "established TCP connections")), "Close connections", true, Box::new(move |ctx| batch_action(ctx, a, "Closed", ("connection", "connections"), Some(Box::new(crate::gui::activity::refresh_network)))));
+            }
+        })
+        .danger()
+        .disabled(closable.is_empty()),
+    ];
+    menus::show(ctx, x, y, &format!("{} selected", plural(n, "connection", "connections")), items);
 }

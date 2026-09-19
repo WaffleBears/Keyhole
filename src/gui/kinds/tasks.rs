@@ -1,10 +1,10 @@
-use super::{Kind, RenderInput, Rendered, refresh_after};
+use super::{Kind, RenderInput, Rendered, plural, refresh_after};
 use crate::gui::columns::{ColDef, c};
 use crate::gui::format::*;
 use crate::gui::lists::{ListData, ListState, nothing_matches};
 use crate::gui::menus::{self, MenuItem};
 use crate::gui::rows::{cell, dot_cell, simple_row, sort_indices, sv_s};
-use crate::gui::simple_action;
+use crate::gui::{batch_action, simple_action};
 use crate::gui::{Shared, chip, copy_text, dialogs, model, ss};
 use crate::{Badge, Chip};
 use keyhole::api::{self, Action};
@@ -44,6 +44,7 @@ pub static KIND: Kind = Kind {
     refresh,
     render,
     menu,
+    multi: Some(multi),
     double,
     button,
     csv: export_csv,
@@ -250,4 +251,44 @@ pub fn add_task(ctx: &Shared, preset: HashMap<String, String>) {
 fn export_csv(data: &ListData, shown: &[usize], _st: &ListState) -> Option<(&'static str, String)> {
     let ListData::Tasks(l, _) = data else { return None };
     Some(("keyhole-tasks", csv(&shown.iter().map(|&i| { let r = &l[i]; vec![r.name.clone(), r.path.clone(), r.state.clone(), r.triggers.clone(), r.action.clone(), r.user.clone(), r.last.clone(), r.result.clone(), r.next.clone(), r.author.clone(), r.target.clone(), r.hidden.to_string()] }).collect::<Vec<_>>(), &["Task", "Folder", "State", "Runs", "Action", "Run as", "Last run", "Last result", "Next run", "Author", "Target", "Hidden"])))
+}
+
+fn multi(ctx: &Shared, srcs: &[usize], x: f32, y: f32) {
+    let rows: Vec<TaskRow> = {
+        let st = ctx.st.borrow();
+        let ListData::Tasks(list, ..) = &st.lists.data else { return };
+        srcs.iter().filter_map(|&i| list.get(i).cloned()).collect()
+    };
+    if rows.is_empty() {
+        return;
+    }
+    let n = rows.len();
+    let full = |d: &TaskRow| format!("{}\\{}", if d.path == "\\" { "" } else { &d.path }, d.name);
+    let acts = |pick: fn(&TaskRow) -> bool, op: &'static str| -> Vec<(String, Action)> {
+        rows.iter().filter(|r| pick(r)).map(|r| (r.name.clone(), Action::Task { path: full(r), op: op.into() })).collect()
+    };
+    let names = rows.iter().take(6).map(|r| r.name.clone()).collect::<Vec<_>>();
+    let listing = if n > 6 { format!("{} and {} more", names.join(", "), n - 6) } else { names.join(", ") };
+    let run = acts(|_| true, "run");
+    let end = acts(|r| r.state == "Running", "end");
+    let enable = acts(|r| r.state == "Disabled", "enable");
+    let disable = acts(|r| r.state != "Disabled", "disable");
+    let items = vec![
+        MenuItem::new("run", &format!("Run {} now", plural(run.len(), "task", "tasks")), { let a = run; move |ctx| batch_action(ctx, a, "Ran", ("task", "tasks"), refresh_after("tasks")) }),
+        MenuItem::new("end", &format!("End {}", plural(end.len(), "task", "tasks")), { let a = end.clone(); move |ctx| batch_action(ctx, a, "Ended", ("task", "tasks"), refresh_after("tasks")) }).disabled(end.is_empty()),
+        MenuItem::sep(),
+        MenuItem::new("enable", &format!("Enable {}", plural(enable.len(), "task", "tasks")), { let a = enable.clone(); move |ctx| batch_action(ctx, a, "Enabled", ("task", "tasks"), refresh_after("tasks")) }).disabled(enable.is_empty()),
+        MenuItem::new("disable", &format!("Disable {}", plural(disable.len(), "task", "tasks")), {
+            let a = disable.clone();
+            move |ctx| {
+                let a = a.clone();
+                dialogs::confirm(ctx, "Disable scheduled tasks?", &format!("This disables {} so they will not run: {}.", plural(a.len(), "task", "tasks"), listing), "Disable", true, Box::new(move |ctx| batch_action(ctx, a, "Disabled", ("task", "tasks"), refresh_after("tasks"))));
+            }
+        })
+        .danger()
+        .disabled(disable.is_empty()),
+        MenuItem::sep(),
+        MenuItem::new("copy", "Copy task paths", { let v = rows.iter().map(full).collect::<Vec<_>>().join("\n"); move |ctx| copy_text(ctx, &v) }),
+    ];
+    menus::show(ctx, x, y, &format!("{} selected", plural(n, "task", "tasks")), items);
 }

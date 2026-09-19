@@ -115,10 +115,10 @@ pub fn session_mappings() -> Vec<SessionMapping> {
             }
             let Some(target) = symlink_target(&format!("\\Sessions\\0\\DosDevices\\{}\\{}", session, letter)) else { continue };
             let lower = target.to_lowercase();
-            let remote = if let Some(rest) = lower.strip_prefix("\\device\\lanmanredirector\\") {
-                super::devpath::unc_from_redirector(&target[target.len() - rest.len()..])
-            } else if let Some(rest) = lower.strip_prefix("\\device\\mup\\") {
-                format!("\\\\{}", &target[target.len() - rest.len()..])
+            let remote = if let Some(rest) = super::strip_prefix_ci(&target, "\\device\\lanmanredirector\\") {
+                super::devpath::unc_from_redirector(rest)
+            } else if let Some(rest) = super::strip_prefix_ci(&target, "\\device\\mup\\") {
+                format!("\\\\{}", rest)
             } else if lower.contains("\\device\\") && lower.contains("network") {
                 target.clone()
             } else {

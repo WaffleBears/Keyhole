@@ -13,11 +13,13 @@ export component Table inherits Rectangle {
     in property <bool> header-visible: true;
     in property <int> scroll-index;
     in property <int> scroll-seq;
+    in property <bool> multi;
     changed scroll-seq => { root.scroll-to(root.scroll-index); }
     callback sort(string);
     callback resize(int, length);
     callback resized-done();
     callback clicked(int);
+    callback multi-clicked(int, bool, bool);
     callback double-clicked(int);
     callback right-clicked(int, length, length);
     callback twisty-clicked(int);
@@ -107,9 +109,21 @@ export component Table inherits Rectangle {
                 Rectangle { y: parent.height - 1px; height: 1px; width: parent.width; background: Theme.line-soft; }
                 rta := TipArea {
                     tip: r.tip;
-                    clicked => { root.clicked(index); }
-                    double-clicked => { root.double-clicked(index); }
+                    property <bool> mod-ctrl;
+                    property <bool> mod-shift;
+                    clicked => {
+                        if root.multi && (self.mod-ctrl || self.mod-shift) {
+                            root.multi-clicked(index, self.mod-ctrl, self.mod-shift);
+                        } else {
+                            root.clicked(index);
+                        }
+                    }
+                    double-clicked => { if !(self.mod-ctrl || self.mod-shift) { root.double-clicked(index); } }
                     pointer-event(e) => {
+                        if e.kind == PointerEventKind.down {
+                            self.mod-ctrl = e.modifiers.control;
+                            self.mod-shift = e.modifiers.shift;
+                        }
                         if e.kind == PointerEventKind.down && e.button == PointerEventButton.right {
                             root.right-clicked(index, self.absolute-position.x + self.mouse-x, self.absolute-position.y + self.mouse-y);
                         }

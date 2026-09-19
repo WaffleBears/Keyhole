@@ -1,4 +1,4 @@
-use super::{Kind, RenderInput, Rendered};
+use super::{Kind, RenderInput, Rendered, plural};
 use crate::gui::columns::{ColDef, c};
 use crate::gui::format::*;
 use crate::gui::lists::{self, ListData, ListState};
@@ -6,7 +6,7 @@ use crate::gui::{dialogs, ui};
 use std::collections::HashMap;
 use crate::gui::menus::{self, MenuItem};
 use crate::gui::rows::{cell, dot_cell, simple_row, sort_indices, suffix_cell, sv_b, sv_n, sv_s};
-use crate::gui::simple_action;
+use crate::gui::{batch_action, simple_action};
 use crate::gui::{Shared, bad, chip, copy_text, good, spawn, ss};
 use crate::{Cell, Chip};
 use keyhole::api::{self, Action};
@@ -44,6 +44,7 @@ pub static KIND: Kind = Kind {
     refresh,
     render,
     menu,
+    multi: Some(multi),
     double,
     button,
     csv: export_csv,
@@ -416,4 +417,36 @@ fn export_csv(data: &ListData, shown: &[usize], st: &ListState) -> Option<(&'sta
         _ => "keyhole-certificates",
     };
     Some((name, csv(&shown.iter().filter_map(|&i| d.rows.get(i)).map(|r| vec![r.subject.clone(), r.friendly.clone(), r.issuer.clone(), time_of(r.not_before_ms), time_of(r.not_after_ms), r.store.clone(), r.store_id.clone(), key_text(r), r.has_private_key.to_string(), r.self_signed.to_string(), r.eku.join("; "), r.sans.join("; "), r.template.clone(), r.bindings.join("; "), r.thumbprint.clone(), r.serial.clone()]).collect::<Vec<_>>(), &["Subject", "Friendly name", "Issuer", "Valid from", "Expires", "Store", "Store id", "Key", "Private key", "Self-signed", "EKU", "SANs", "Template", "Bound to", "Thumbprint", "Serial"])))
+}
+
+fn multi(ctx: &Shared, srcs: &[usize], x: f32, y: f32) {
+    let rows: Vec<CertRow> = srcs.iter().filter_map(|&i| row_at(ctx, i)).collect();
+    if rows.is_empty() {
+        return;
+    }
+    let n = rows.len();
+    let names = rows.iter().take(6).map(|r| format!("{} ({})", r.subject, r.store)).collect::<Vec<_>>();
+    let listing = if n > 6 { format!("{} and {} more", names.join(", "), n - 6) } else { names.join(", ") };
+    let bound = rows.iter().filter(|r| !r.bindings.is_empty()).count();
+    let roots = rows.iter().filter(|r| r.store_id == "Root" || r.store_id == "AuthRoot").count();
+    let remove: Vec<(String, Action)> = rows.iter().map(|r| (r.subject.clone(), Action::CertRemove { thumbprint: r.thumbprint.clone(), store: r.store_id.clone() })).collect();
+    let items = vec![
+        MenuItem::new("thumb", "Copy thumbprints", { let v = rows.iter().map(|r| r.thumbprint.clone()).collect::<Vec<_>>().join("\n"); move |ctx| copy_text(ctx, &v) }),
+        MenuItem::new("subject", "Copy subjects", { let v = rows.iter().map(|r| r.subject.clone()).collect::<Vec<_>>().join("\n"); move |ctx| copy_text(ctx, &v) }),
+        MenuItem::sep(),
+        MenuItem::new("remove", &format!("Remove {} from their stores", plural(n, "certificate", "certificates")), move |ctx| {
+            let a = remove.clone();
+            let mut body = format!("This removes {}: {}.", plural(a.len(), "certificate", "certificates"), listing);
+            if bound > 0 {
+                body.push_str(&format!(" {} in use by a binding, which will stop working until another certificate is bound.", plural(bound, "is", "are")));
+            }
+            if roots > 0 {
+                body.push_str(" Removing a root authority makes every certificate it issued untrusted on this machine.");
+            }
+            body.push_str(" Private keys are not deleted.");
+            dialogs::confirm(ctx, "Remove certificates?", &body, "Remove", true, Box::new(move |ctx| batch_action(ctx, a, "Removed", ("certificate", "certificates"), super::refresh_after("certs"))));
+        })
+        .danger(),
+    ];
+    menus::show(ctx, x, y, &format!("{} selected", plural(n, "certificate", "certificates")), items);
 }

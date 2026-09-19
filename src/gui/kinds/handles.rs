@@ -1,10 +1,10 @@
-use super::{Kind, RenderInput, Rendered};
+use super::{Kind, RenderInput, Rendered, plural};
 use crate::gui::columns::{ColDef, c};
 use crate::gui::format::*;
 use crate::gui::lists::{ListData, ListState};
-use crate::gui::menus::{self};
+use crate::gui::menus::{self, MenuItem};
 use crate::gui::rows::{cell, num, simple_row, sort_indices, sv_n, sv_s};
-use crate::gui::{Shared, chip};
+use crate::gui::{Shared, batch_action, chip, copy_text, dialogs};
 use crate::{Chip, Row};
 use keyhole::api::{self};
 use keyhole::state::App;
@@ -39,6 +39,7 @@ pub static KIND: Kind = Kind {
     refresh,
     render,
     menu,
+    multi: Some(multi),
     double,
     button,
     csv: export_csv,
@@ -147,4 +148,27 @@ fn button(ctx: &Shared, id: &str) {
 fn export_csv(data: &ListData, shown: &[usize], _st: &ListState) -> Option<(&'static str, String)> {
     let ListData::Handles(h) = data else { return None };
     Some(("keyhole-open-handles", csv(&shown.iter().map(|&i| { let r = &h.rows[i]; vec![r.type_name.clone(), r.display.clone(), r.process.clone(), r.pid.to_string(), r.access_text.clone(), r.shared_with.to_string()] }).collect::<Vec<_>>(), &["Type", "Name", "Process", "PID", "Access", "Shared"])))
+}
+
+fn multi(ctx: &Shared, srcs: &[usize], x: f32, y: f32) {
+    let rows: Vec<keyhole::model::HandleRow> = {
+        let st = ctx.st.borrow();
+        let ListData::Handles(h) = &st.lists.data else { return };
+        srcs.iter().filter_map(|&i| h.rows.get(i).cloned()).collect()
+    };
+    if rows.is_empty() {
+        return;
+    }
+    let n = rows.len();
+    let close: Vec<(String, keyhole::api::Action)> = rows.iter().map(|r| (format!("{} in {}", r.display, r.process), keyhole::api::Action::CloseHandle { pid: r.pid, handle: r.handle })).collect();
+    let items = vec![
+        MenuItem::new("copy", "Copy names", { let v = rows.iter().map(|r| r.display.clone()).collect::<Vec<_>>().join("\n"); move |ctx| copy_text(ctx, &v) }),
+        MenuItem::sep(),
+        MenuItem::new("close", &format!("Close {}", plural(n, "handle", "handles")), move |ctx| {
+            let a = close.clone();
+            dialogs::confirm(ctx, "Close handles?", &format!("This forcibly closes {} inside the owning processes. Programs that still use them can crash or corrupt data.", plural(a.len(), "handle", "handles")), "Close handles", true, Box::new(move |ctx| batch_action(ctx, a, "Closed", ("handle", "handles"), super::refresh_after("handles"))));
+        })
+        .danger(),
+    ];
+    menus::show(ctx, x, y, &format!("{} selected", plural(n, "handle", "handles")), items);
 }

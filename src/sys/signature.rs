@@ -174,6 +174,7 @@ fn verify_catalog_with(path: &str, algorithm: &str) -> Option<Trust> {
         for _ in 0..8 {
             let hcatinfo = CryptCATAdminEnumCatalogFromHash(hcatadmin, &hash, None, if prev == 0 { None } else { Some(&mut prev as *mut isize) });
             if hcatinfo == 0 {
+                prev = 0;
                 break;
             }
             let mut info = CATALOG_INFO {
@@ -186,9 +187,11 @@ fn verify_catalog_with(path: &str, algorithm: &str) -> Option<Trust> {
             }
             prev = hcatinfo;
             if result.is_some() {
-                let _ = CryptCATAdminReleaseCatalogContext(hcatadmin, hcatinfo, 0);
                 break;
             }
+        }
+        if prev != 0 {
+            let _ = CryptCATAdminReleaseCatalogContext(hcatadmin, prev, 0);
         }
         let _ = CryptCATAdminReleaseContext(hcatadmin, 0);
         result

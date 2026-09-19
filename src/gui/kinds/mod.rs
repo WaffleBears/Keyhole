@@ -51,6 +51,7 @@ pub struct Kind {
     pub refresh: fn(&App, &ListState) -> ListData,
     pub render: fn(&Shared, &ListData, &RenderInput) -> Rendered,
     pub menu: fn(&Shared, usize, f32, f32),
+    pub multi: Option<fn(&Shared, &[usize], f32, f32)>,
     pub double: fn(&Shared, usize),
     pub button: fn(&Shared, &str),
     pub csv: fn(&ListData, &[usize], &ListState) -> Option<(&'static str, String)>,
@@ -110,6 +111,10 @@ pub fn data_kind(data: &ListData) -> Option<&'static str> {
         ListData::Certs(_) => Some("certs"),
         ListData::NetConfig(_) => Some("netconfig"),
     }
+}
+
+pub fn plural(n: usize, one: &str, many: &str) -> String {
+    format!("{} {}", n, if n == 1 { one } else { many })
 }
 
 pub fn refresh_after(kind: &'static str) -> Option<Box<dyn FnOnce(&Shared)>> {

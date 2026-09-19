@@ -46,7 +46,7 @@ pub fn visible_defs(ctx: &Shared) -> Vec<ColDef> {
 
 pub fn rebuild_tree_cols(ctx: &Shared) {
     let defs = visible_defs(ctx);
-    let (cols, fixed) = columns::build(ctx, "tree", &defs);
+    let (cols, fixed) = columns::build(ctx, "tree", &defs, ui(ctx).get_tree_cols());
     let u = ui(ctx);
     u.set_tree_cols(cols);
     u.set_tree_fixed(fixed);

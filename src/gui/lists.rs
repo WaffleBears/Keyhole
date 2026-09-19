@@ -9,7 +9,7 @@ use keyhole::sys::services::ServiceRow;
 use keyhole::sys::software::SoftwareRow;
 use keyhole::sys::tasks::TaskRow;
 use slint::{Model, SharedString};
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 
 #[derive(Default)]
 pub enum ListData {
@@ -47,6 +47,8 @@ pub struct ListState {
     pub gh_type: String,
     pub net_resolve: bool,
     pub sel: Option<usize>,
+    pub multi: BTreeSet<usize>,
+    pub count: String,
     pub events: super::kinds::events::EventsUi,
     pub segment: HashMap<String, String>,
     pub updates_pending: Option<Result<Vec<keyhole::sys::updates::PendingRow>, String>>,
@@ -121,9 +123,21 @@ pub fn wire(ctx: &Shared) {
     }
     {
         let ctx = ctx.clone();
+        u.on_list_multi_clicked(move |i, ctrl, shift| multi_click(&ctx, i as usize, ctrl, shift));
+    }
+    {
+        let ctx = ctx.clone();
         u.on_list_right(move |i, x, y| {
-            select_index(&ctx, i as usize);
-            on_menu(&ctx, i as usize, x, y);
+            let i = i as usize;
+            let in_multi = {
+                let st = ctx.st.borrow();
+                st.lists.multi.len() > 1 && st.lists.multi.contains(&i)
+            };
+            if in_multi && on_multi_menu(&ctx, x, y) {
+                return;
+            }
+            select_index(&ctx, i);
+            on_menu(&ctx, i, x, y);
         });
     }
     {
@@ -191,7 +205,7 @@ pub fn wire(ctx: &Shared) {
 
 pub fn set_cols(ctx: &Shared, kind: &str) {
     let table = table_of(ctx, kind);
-    let (cols, fixed) = columns::build(ctx, &table, defs(ctx, kind));
+    let (cols, fixed) = columns::build(ctx, &table, defs(ctx, kind), ui(ctx).get_list_cols());
     let u = ui(ctx);
     u.set_list_cols(cols);
     u.set_list_fixed(fixed);
@@ -203,10 +217,105 @@ pub fn enter(ctx: &Shared, kind: &str) {
 }
 
 fn select_index(ctx: &Shared, i: usize) {
-    let old = ctx.st.borrow_mut().lists.sel.replace(i);
-    if old != Some(i) {
-        super::highlight_row(&ui(ctx).get_list_rows(), old, Some(i));
+    {
+        let mut st = ctx.st.borrow_mut();
+        st.lists.multi.clear();
+        st.lists.sel = Some(i);
     }
+    apply_highlight(ctx);
+}
+
+fn multi_click(ctx: &Shared, i: usize, ctrl: bool, shift: bool) {
+    {
+        let mut st = ctx.st.borrow_mut();
+        let len = st.lists.shown.len();
+        if i >= len {
+            return;
+        }
+        if shift {
+            let anchor = st.lists.sel.unwrap_or(i).min(len - 1);
+            let (a, b) = if anchor <= i { (anchor, i) } else { (i, anchor) };
+            if !ctrl {
+                st.lists.multi.clear();
+            }
+            st.lists.multi.extend(a..=b);
+            st.lists.sel = Some(anchor);
+        } else {
+            if st.lists.multi.is_empty()
+                && let Some(s) = st.lists.sel
+                && s != i
+                && s < len
+            {
+                st.lists.multi.insert(s);
+            }
+            if !st.lists.multi.remove(&i) {
+                st.lists.multi.insert(i);
+            }
+            st.lists.sel = Some(i);
+        }
+        if st.lists.multi.len() == 1 {
+            let only = *st.lists.multi.iter().next().unwrap();
+            st.lists.multi.clear();
+            st.lists.sel = Some(only);
+        }
+    }
+    apply_highlight(ctx);
+}
+
+fn apply_highlight(ctx: &Shared) {
+    let (sel, multi, count) = {
+        let st = ctx.st.borrow();
+        (st.lists.sel, st.lists.multi.clone(), st.lists.count.clone())
+    };
+    let u = ui(ctx);
+    let rows = u.get_list_rows();
+    for i in 0..rows.row_count() {
+        let on = multi.contains(&i) || (multi.is_empty() && sel == Some(i));
+        if let Some(mut r) = rows.row_data(i)
+            && r.selected != on
+        {
+            r.selected = on;
+            rows.set_row_data(i, r);
+        }
+    }
+    u.set_list_count(ss(&count_text(&count, multi.len())));
+}
+
+fn count_text(base: &str, selected: usize) -> String {
+    if selected > 1 {
+        if base.is_empty() { format!("{} selected", selected) } else { format!("{}  ·  {} selected", base, selected) }
+    } else {
+        base.to_string()
+    }
+}
+
+pub fn clear_multi(ctx: &Shared) -> bool {
+    if ctx.st.borrow().lists.multi.is_empty() {
+        return false;
+    }
+    ctx.st.borrow_mut().lists.multi.clear();
+    apply_highlight(ctx);
+    true
+}
+
+pub fn select_all(ctx: &Shared) {
+    {
+        let mut st = ctx.st.borrow_mut();
+        let len = st.lists.shown.len();
+        if len < 2 {
+            return;
+        }
+        st.lists.multi = (0..len).collect();
+        if st.lists.sel.is_none() {
+            st.lists.sel = Some(0);
+        }
+    }
+    apply_highlight(ctx);
+}
+
+pub fn selected_sources(ctx: &Shared) -> Vec<usize> {
+    let st = ctx.st.borrow();
+    st.lists.multi.iter().filter_map(|&i| st.lists.shown.get(i).copied()).collect()
 }
 
 pub fn on_key(ctx: &Shared, key: char) -> bool {
@@ -240,7 +349,9 @@ pub fn on_key(ctx: &Shared, key: char) -> bool {
 
 pub fn setup(ctx: &Shared, kind: &str) -> bool {
     if ctx.st.borrow().lists.kind != kind {
-        ctx.st.borrow_mut().lists.sel = None;
+        let mut st = ctx.st.borrow_mut();
+        st.lists.sel = None;
+        st.lists.multi.clear();
     }
     ctx.st.borrow_mut().lists.kind = kind.to_string();
     let u = ui(ctx);
@@ -369,8 +480,10 @@ pub fn render(ctx: &Shared) {
     };
     let kinds::Rendered { chips, mut rows, shown, count, empty } = rendered;
     let u = ui(ctx);
-    let previous_key = ctx.st.borrow().lists.sel.and_then(|i| u.get_list_rows().row_data(i)).map(|r| row_key(&r));
-    let sel = {
+    let old_rows = u.get_list_rows();
+    let previous_key = ctx.st.borrow().lists.sel.and_then(|i| old_rows.row_data(i)).map(|r| row_key(&r));
+    let multi_keys: std::collections::HashSet<String> = ctx.st.borrow().lists.multi.iter().filter_map(|&i| old_rows.row_data(i)).map(|r| row_key(&r)).collect();
+    let (sel, multi) = {
         let mut st = ctx.st.borrow_mut();
         let moved = previous_key.as_ref().and_then(|k| rows.iter().position(|r| row_key(r) == *k));
         st.lists.sel = match (moved, st.lists.sel) {
@@ -378,12 +491,24 @@ pub fn render(ctx: &Shared) {
             (None, Some(i)) if i < shown.len() && previous_key.is_none() => Some(i),
             _ => None,
         };
+        st.lists.multi = if multi_keys.is_empty() { BTreeSet::new() } else { rows.iter().enumerate().filter(|(_, r)| multi_keys.contains(&row_key(r))).map(|(i, _)| i).collect() };
+        if st.lists.multi.len() < 2 {
+            st.lists.multi.clear();
+        }
         st.lists.shown = shown;
-        st.lists.sel
+        st.lists.count = count.clone();
+        (st.lists.sel, st.lists.multi.clone())
     };
-    if let Some(i) = sel {
-        rows[i].selected = true;
+    if multi.is_empty() {
+        if let Some(i) = sel {
+            rows[i].selected = true;
+        }
+    } else {
+        for &i in &multi {
+            rows[i].selected = true;
+        }
     }
+    let count = count_text(&count, multi.len());
     let is_empty = rows.is_empty();
     let (chips, chips2) = super::split_chips(ctx, chips, 0.0);
     u.set_list_chips(model(chips));
@@ -427,6 +552,17 @@ fn on_menu(ctx: &Shared, i: usize, x: f32, y: f32) {
     let Some(src) = src_index(ctx, i) else { return };
     let kind = ctx.st.borrow().lists.kind.clone();
     (self::kind(&kind).menu)(ctx, src, x, y);
+}
+
+fn on_multi_menu(ctx: &Shared, x: f32, y: f32) -> bool {
+    let kind = ctx.st.borrow().lists.kind.clone();
+    let Some(multi) = self::kind(&kind).multi else { return false };
+    let sources = selected_sources(ctx);
+    if sources.len() < 2 {
+        return false;
+    }
+    multi(ctx, &sources, x, y);
+    true
 }
 
 pub fn csv_of(ctx: &Shared) -> Option<(String, String)> {

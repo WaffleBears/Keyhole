@@ -152,7 +152,7 @@ pub fn detail_defs(tab: &str) -> &'static [ColDef] {
 
 pub fn render_detail_head(ctx: &Shared) {
     let tab = ui(ctx).get_tab().to_string();
-    let (cols, fixed) = columns::build(ctx, &format!("detail.{}", tab), detail_defs(&tab));
+    let (cols, fixed) = columns::build(ctx, &format!("detail.{}", tab), detail_defs(&tab), ui(ctx).get_detail_cols());
     let u = ui(ctx);
     u.set_detail_cols(cols);
     u.set_detail_fixed(fixed);

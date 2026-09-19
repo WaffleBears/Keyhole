@@ -84,7 +84,7 @@ component ProcessesView inherits Rectangle {
                 mouse-cursor: row-resize;
                 property <length> start-h;
                 pointer-event(e) => { if e.kind == PointerEventKind.down { self.start-h = Ui.tree-height; } }
-                moved => { Ui.tree-height = max(120px, min(Ui.win-height - 330px, self.start-h + self.mouse-y - self.pressed-y)); }
+                moved => { Ui.tree-height = max(120px, min(Ui.win-height - 330px, Ui.tree-height + self.mouse-y - self.pressed-y)); }
             }
         }
         Card {
@@ -261,7 +261,9 @@ component ListPane inherits Card {
                 sort(k) => { Ui.list-sort-clicked(k); }
                 resize(i, w) => { Ui.list-resize(i, w); }
                 resized-done => { Ui.list-resized-done(); }
+                multi: true;
                 clicked(i) => { Ui.list-clicked(i); }
+                multi-clicked(i, c, s) => { Ui.list-multi-clicked(i, c, s); }
                 double-clicked(i) => { Ui.list-double(i); }
                 right-clicked(i, x, y) => { Ui.list-right(i, x, y); }
             }

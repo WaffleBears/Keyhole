@@ -599,6 +599,8 @@ fn on_key(ctx: &Shared, text: &str, control: bool, shift: bool) -> bool {
             dumpview::close(ctx);
         } else if u.get_finder_open() {
             finder::close(ctx);
+        } else {
+            lists::clear_multi(ctx);
         }
         focus_keys(ctx);
         return true;
@@ -622,6 +624,13 @@ fn on_key(ctx: &Shared, text: &str, control: bool, shift: bool) -> bool {
         u.set_search_focus_seq(u.get_search_focus_seq() + 1);
         return true;
     }
+    if control && (key == 'a' || key == 'A') {
+        let mode = ctx.st.borrow().mode.clone();
+        if kinds::kind_of(&mode).is_some() {
+            lists::select_all(ctx);
+            return true;
+        }
+    }
     if key == char::from(slint::platform::Key::F5) {
         refresh_current(ctx);
         return true;
@@ -635,7 +644,7 @@ fn on_key(ctx: &Shared, text: &str, control: bool, shift: bool) -> bool {
     if mode == "processes" {
         return tree::on_key(ctx, key);
     }
-    if mode != "activity" {
+    if kinds::kind_of(&mode).is_some() {
         return lists::on_key(ctx, key);
     }
     false
@@ -748,6 +757,42 @@ pub fn do_action(ctx: &Shared, action: Action, success: &str) {
         }
         Err(e) => bad(ctx, &e),
     });
+}
+
+pub fn batch_action(ctx: &Shared, actions: Vec<(String, Action)>, verb: &str, noun: (&str, &str), refresh: Option<Box<dyn FnOnce(&Shared)>>) {
+    let total = actions.len();
+    let verb = verb.to_string();
+    let noun = (noun.0.to_string(), noun.1.to_string());
+    spawn(
+        ctx,
+        move |app| {
+            let mut errors: Vec<String> = Vec::new();
+            for (label, action) in actions {
+                if let Err(e) = api::run(app, action) {
+                    errors.push(format!("{}: {}", label, e));
+                }
+            }
+            errors
+        },
+        move |ctx, errors: Vec<String>| {
+            let done = total - errors.len();
+            if errors.is_empty() {
+                good(ctx, &format!("{} {}", verb, kinds::plural(done, &noun.0, &noun.1)));
+            } else {
+                let mut shown: Vec<String> = errors.iter().take(3).cloned().collect();
+                if errors.len() > 3 {
+                    shown.push(format!("and {} more", errors.len() - 3));
+                }
+                bad(ctx, &format!("{} {} of {}. {}", verb, done, kinds::plural(total, &noun.0, &noun.1), shown.join(". ")));
+            }
+            if done > 0
+                && let Some(r) = refresh
+            {
+                let ctx2 = ctx.clone();
+                slint::Timer::single_shot(std::time::Duration::from_millis(400), move || r(&ctx2));
+            }
+        },
+    );
 }
 
 pub fn simple_action(ctx: &Shared, action: Action, success: &str, refresh: Option<Box<dyn FnOnce(&Shared)>>) {

@@ -250,7 +250,7 @@ pub fn show_shortcuts(ctx: &Shared) {
     let groups: [(&str, &[(&str, &[&str])]); 4] = [
         ("Search & find", &[("Focus the search box", &["Ctrl", "F"]), ("Run the search", &["Enter"]), ("Close a dialog / menu", &["Esc"])]),
         ("Process tree", &[("Move selection", &["↑", "↓"]), ("Collapse / expand the selected branch", &["←", "→"]), ("Terminate selected", &["Del"]), ("Refresh now", &["F5"]), ("Freeze / unfreeze the view", &["Space"]), ("Filter box understands  user:name   pid:1234   session:1", &[])]),
-        ("Lists and the finder", &[("Move the highlighted row", &["↑", "↓"]), ("Open the highlighted row (jump to its process)", &["Enter"])]),
+        ("Lists and the finder", &[("Move the highlighted row", &["↑", "↓"]), ("Open the highlighted row (jump to its process)", &["Enter"]), ("Select several rows, then right-click for actions on all of them", &["Ctrl", "click"]), ("Select a range of rows", &["Shift", "click"]), ("Select every row in the list", &["Ctrl", "A"]), ("Clear a multiple selection", &["Esc"])]),
         ("General", &[("Show this help", &["?"]), ("Paste a path in the search box, or click Browse, to find what's using it", &[]), ("Right-click any row for actions", &[]), ("Drag a column edge to resize. Right-click the process header to choose columns", &[])]),
     ];
     let mut rows = Vec::new();

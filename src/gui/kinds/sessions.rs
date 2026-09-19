@@ -1,10 +1,10 @@
-use super::{Kind, RenderInput, Rendered, refresh_after};
+use super::{Kind, RenderInput, Rendered, plural, refresh_after};
 use crate::gui::columns::{ColDef, c};
 use crate::gui::format::*;
 use crate::gui::lists::{ListData, ListState, nothing_matches};
 use crate::gui::menus::{self, MenuItem};
 use crate::gui::rows::{cell, dot_cell, num, simple_row, sort_indices, sv_n, sv_s};
-use crate::gui::simple_action;
+use crate::gui::{batch_action, simple_action};
 use crate::gui::{Shared, chip, copy_text, dialogs};
 use crate::Chip;
 use keyhole::api::{self, Action};
@@ -41,6 +41,7 @@ pub static KIND: Kind = Kind {
     refresh,
     render,
     menu,
+    multi: Some(multi),
     double,
     button,
     csv: export_csv,
@@ -161,4 +162,36 @@ fn button(ctx: &Shared, id: &str) {
 fn export_csv(data: &ListData, shown: &[usize], _st: &ListState) -> Option<(&'static str, String)> {
     let ListData::Sessions(l) = data else { return None };
     Some(("keyhole-sessions", csv(&shown.iter().map(|&i| { let e = &l[i]; let r = &e.row; vec![r.id.to_string(), r.user.clone(), r.state.clone(), e.processes.to_string(), time_of(r.logon_ms), if r.connect_ms > 0 { time_of(r.connect_ms) } else { String::new() }, if r.idle_ms > 0 { fmt_age(r.idle_ms) } else { String::new() }, r.win_station.clone(), r.client.clone(), r.client_address.clone()] }).collect::<Vec<_>>(), &["Session", "User", "State", "Processes", "Logged on", "Connected", "Idle", "Station", "Client", "Client address"])))
+}
+
+fn multi(ctx: &Shared, srcs: &[usize], x: f32, y: f32) {
+    let rows: Vec<keyhole::sys::sessions::SessionRow> = {
+        let st = ctx.st.borrow();
+        let ListData::Sessions(list) = &st.lists.data else { return };
+        srcs.iter().filter_map(|&i| list.get(i).map(|e| e.row.clone())).filter(|r| !r.user.is_empty()).collect()
+    };
+    if rows.is_empty() {
+        return;
+    }
+    let n = rows.len();
+    let who = rows.iter().take(6).map(|r| format!("{} (session {})", r.user, r.id)).collect::<Vec<_>>();
+    let listing = if n > 6 { format!("{} and {} more", who.join(", "), n - 6) } else { who.join(", ") };
+    let disc: Vec<(String, Action)> = rows.iter().map(|r| (format!("session {}", r.id), Action::SessionDisconnect(r.id))).collect();
+    let logoff: Vec<(String, Action)> = rows.iter().map(|r| (format!("session {}", r.id), Action::SessionLogoff(r.id))).collect();
+    let items = vec![
+        MenuItem::new("disc", &format!("Disconnect {}", plural(n, "session", "sessions")), {
+            let listing = listing.clone();
+            move |ctx| {
+                let a = disc.clone();
+                dialogs::confirm(ctx, "Disconnect sessions?", &format!("This disconnects {}. Their programs keep running. They can reconnect.", listing), "Disconnect", true, Box::new(move |ctx| batch_action(ctx, a, "Disconnected", ("session", "sessions"), refresh_after("sessions"))));
+            }
+        })
+        .danger(),
+        MenuItem::new("logoff", &format!("Log off {}", plural(n, "session", "sessions")), move |ctx| {
+            let a = logoff.clone();
+            dialogs::confirm(ctx, "Log off sessions?", &format!("This logs off {}. Unsaved work in those sessions is lost.", listing), "Log off", true, Box::new(move |ctx| batch_action(ctx, a, "Logged off", ("session", "sessions"), refresh_after("sessions"))));
+        })
+        .danger(),
+    ];
+    menus::show(ctx, x, y, &format!("{} selected", plural(n, "session", "sessions")), items);
 }

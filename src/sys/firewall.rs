@@ -67,14 +67,14 @@ pub struct RuleKey {
 impl RuleKey {
     fn matches(&self, r: &FirewallRow) -> bool {
         r.name == self.name
-            && (self.direction.is_empty() || r.direction == self.direction)
-            && (self.action.is_empty() || r.action == self.action)
-            && (self.protocol.is_empty() || r.protocol == self.protocol)
-            && (self.local_ports.is_empty() || r.local_ports == self.local_ports)
-            && (self.remote_ports.is_empty() || r.remote_ports == self.remote_ports)
-            && (self.remote_addresses.is_empty() || r.remote_addresses == self.remote_addresses)
-            && (self.program.is_empty() || r.program.eq_ignore_ascii_case(&self.program))
-            && (self.profiles.is_empty() || r.profiles == self.profiles)
+            && r.direction == self.direction
+            && r.action == self.action
+            && r.protocol == self.protocol
+            && r.local_ports == self.local_ports
+            && r.remote_ports == self.remote_ports
+            && r.remote_addresses == self.remote_addresses
+            && r.program.eq_ignore_ascii_case(&self.program)
+            && r.profiles == self.profiles
     }
 }
 

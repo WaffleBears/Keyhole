@@ -309,13 +309,9 @@ pub fn relaunch(image: &str, command_line: &str, cwd: &str, owner: Option<OwnerT
         return Err("the program's path is unknown, so it cannot be started again".into());
     }
     let rest = strip_first_token(command_line, image);
-    let token_error = match owner {
-        Some(token) => match relaunch_with_token(&token, image, &rest, cwd) {
-            Ok(()) => return Ok(()),
-            Err(e) => Some(e),
-        },
-        None => None,
-    };
+    if let Some(token) = owner {
+        return relaunch_with_token(&token, image, &rest, cwd).map_err(|e| format!("the process was stopped but could not be started again under its own account, so it was not restarted as administrator: {}", e));
+    }
     let mut cmd = std::process::Command::new(image);
     if !rest.is_empty() {
         cmd.raw_arg(rest);
@@ -323,10 +319,7 @@ pub fn relaunch(image: &str, command_line: &str, cwd: &str, owner: Option<OwnerT
     if !cwd.is_empty() && std::path::Path::new(cwd).is_dir() {
         cmd.current_dir(cwd);
     }
-    cmd.spawn().map(|_| ()).map_err(|e| match token_error {
-        Some(t) => format!("{}. Starting it as administrator failed too: {}", t, e),
-        None => format!("relaunch failed: {}", e),
-    })
+    cmd.spawn().map(|_| ()).map_err(|e| format!("relaunch failed: {}", e))
 }
 
 fn relaunch_with_token(token: &OwnerToken, image: &str, args: &str, cwd: &str) -> Result<(), String> {
@@ -477,6 +470,7 @@ pub fn file_properties(path: &str) -> Result<(), String> {
     if path.is_empty() || !std::path::Path::new(&path).exists() {
         return Err("that file does not exist".into());
     }
+    let (tx, rx) = std::sync::mpsc::channel::<Result<(), String>>();
     std::thread::Builder::new()
         .name("keyhole-properties".into())
         .spawn(move || unsafe {
@@ -493,9 +487,11 @@ pub fn file_properties(path: &str) -> Result<(), String> {
                 nShow: SW_SHOWNORMAL.0,
                 ..Default::default()
             };
-            if ShellExecuteExW(&mut info).is_err() {
+            if let Err(e) = ShellExecuteExW(&mut info) {
+                let _ = tx.send(Err(format!("the shell would not open the properties sheet: {}", describe(&e))));
                 return;
             }
+            let _ = tx.send(Ok(()));
             unsafe extern "system" fn count(_: windows::Win32::Foundation::HWND, lp: windows::Win32::Foundation::LPARAM) -> windows::core::BOOL {
                 unsafe { *(lp.0 as *mut u32) += 1 };
                 windows::core::BOOL(1)
@@ -520,7 +516,7 @@ pub fn file_properties(path: &str) -> Result<(), String> {
             }
         })
         .map_err(|e| e.to_string())?;
-    Ok(())
+    rx.recv().unwrap_or_else(|_| Err("the properties sheet could not be opened".into()))
 }
 
 pub fn write_dump(pid: u32, path: &str, full: bool) -> Result<(), String> {

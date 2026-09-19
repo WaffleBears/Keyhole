@@ -1,10 +1,10 @@
-use super::{Kind, RenderInput, Rendered, refresh_after, unsigned};
+use super::{Kind, RenderInput, Rendered, plural, refresh_after, unsigned};
 use crate::gui::columns::{ColDef, c};
 use crate::gui::format::*;
 use crate::gui::lists::{ListData, ListState, nothing_matches};
 use crate::gui::menus::{self, MenuItem};
 use crate::gui::rows::{cell, dot_cell, sig_text, sig_tone, simple_row, sort_indices, sv_b, sv_s};
-use crate::gui::simple_action;
+use crate::gui::{batch_action, simple_action};
 use crate::gui::{Shared, chip, copy_text, dialogs};
 use crate::Chip;
 use keyhole::api::{self, Action, StartupEntry};
@@ -40,6 +40,7 @@ pub static KIND: Kind = Kind {
     refresh,
     render,
     menu,
+    multi: Some(multi),
     double,
     button,
     csv: export_csv,
@@ -195,4 +196,43 @@ fn button(ctx: &Shared, id: &str) {
 fn export_csv(data: &ListData, shown: &[usize], _st: &ListState) -> Option<(&'static str, String)> {
     let ListData::Startup(l) = data else { return None };
     Some(("keyhole-startup", csv(&shown.iter().map(|&i| { let r = &l[i]; vec![r.name.clone(), r.command.clone(), r.publisher.clone(), r.enabled.to_string(), r.trust.clone(), r.location.clone(), r.scope.clone()] }).collect::<Vec<_>>(), &["Name", "Command", "Publisher", "Enabled", "Signature", "Location", "Scope"])))
+}
+
+fn multi(ctx: &Shared, srcs: &[usize], x: f32, y: f32) {
+    let rows: Vec<StartupEntry> = {
+        let st = ctx.st.borrow();
+        let ListData::Startup(list) = &st.lists.data else { return };
+        srcs.iter().filter_map(|&i| list.get(i).cloned()).collect()
+    };
+    if rows.is_empty() {
+        return;
+    }
+    let n = rows.len();
+    let can_toggle = |d: &StartupEntry| matches!(d.source.as_str(), "hklm_run" | "hklm_wow_run" | "hkcu_run" | "folder");
+    let can_remove = |d: &StartupEntry| d.source != "winlogon" && d.source != "hklm_runonceex" && !d.source.starts_with("hku_");
+    let toggle = |enabled: bool| -> Vec<(String, Action)> {
+        rows.iter().filter(|d| can_toggle(d) && d.enabled != enabled).map(|d| (d.name.clone(), Action::StartupEnabled { source: d.source.clone(), scope: d.scope.clone(), name: d.name.clone(), enabled })).collect()
+    };
+    let disable = toggle(false);
+    let enable = toggle(true);
+    let remove: Vec<(String, Action)> = rows.iter().filter(|d| can_remove(d)).map(|d| (d.name.clone(), Action::RemoveStartup { source: d.source.clone(), name: d.name.clone(), command: d.command.clone() })).collect();
+    let names = rows.iter().take(6).map(|r| r.name.clone()).collect::<Vec<_>>();
+    let listing = if n > 6 { format!("{} and {} more", names.join(", "), n - 6) } else { names.join(", ") };
+    let items = vec![
+        MenuItem::new("disable", &format!("Disable {} (keep the entries)", plural(disable.len(), "entry", "entries")), { let a = disable.clone(); move |ctx| batch_action(ctx, a, "Disabled", ("entry", "entries"), refresh_after("startup")) }).disabled(disable.is_empty()),
+        MenuItem::new("enable", &format!("Enable {}", plural(enable.len(), "entry", "entries")), { let a = enable.clone(); move |ctx| batch_action(ctx, a, "Enabled", ("entry", "entries"), refresh_after("startup")) }).disabled(enable.is_empty()),
+        MenuItem::sep(),
+        MenuItem::new("copy", "Copy names", { let v = rows.iter().map(|r| r.name.clone()).collect::<Vec<_>>().join("\n"); move |ctx| copy_text(ctx, &v) }),
+        MenuItem::sep(),
+        MenuItem::new("remove", &format!("Remove {} from startup", plural(remove.len(), "entry", "entries")), {
+            let a = remove.clone();
+            move |ctx| {
+                let a = a.clone();
+                dialogs::confirm(ctx, "Remove startup entries?", &format!("This deletes {}: {}. The programs themselves are not uninstalled.", plural(a.len(), "startup entry", "startup entries"), listing), "Remove", true, Box::new(move |ctx| batch_action(ctx, a, "Removed", ("entry", "entries"), refresh_after("startup"))));
+            }
+        })
+        .danger()
+        .disabled(remove.is_empty()),
+    ];
+    menus::show(ctx, x, y, &format!("{} selected", plural(n, "entry", "entries")), items);
 }

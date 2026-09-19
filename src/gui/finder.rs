@@ -111,7 +111,7 @@ pub fn wire(ctx: &Shared) {
 }
 
 pub fn render_head(ctx: &Shared) {
-    let (cols, fixed) = columns::build(ctx, "finder", columns::FINDER);
+    let (cols, fixed) = columns::build(ctx, "finder", columns::FINDER, ui(ctx).get_finder_cols());
     let u = ui(ctx);
     u.set_finder_cols(cols);
     u.set_finder_fixed(fixed);
@@ -188,6 +188,7 @@ pub fn run_search(ctx: &Shared, query: &str, subtree: bool) {
     u.set_finder_rows(model(Vec::<Row>::new()));
     u.set_finder_chips(model(Vec::<crate::Chip>::new()));
     render_head(ctx);
+    super::focus_keys(ctx);
     let q = query.clone();
     spawn(ctx, move |app| api::search(app, &q, subtree), move |ctx, res: SearchResult| {
         if ctx.st.borrow().finder.pending != token {

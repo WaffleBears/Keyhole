@@ -1,10 +1,10 @@
-use super::{Kind, RenderInput, Rendered, refresh_after};
+use super::{Kind, RenderInput, Rendered, plural, refresh_after};
 use crate::gui::columns::{ColDef, c};
 use crate::gui::format::*;
 use crate::gui::lists::{self, ListData, ListState, nothing_matches};
 use crate::gui::menus::{self, MenuItem};
 use crate::gui::rows::{cell, dot_cell, simple_row, sort_indices, sv_b, sv_s};
-use crate::gui::simple_action;
+use crate::gui::{batch_action, simple_action};
 use crate::gui::{Shared, chip, copy_text, dialogs};
 use crate::Chip;
 use keyhole::api::{self, Action};
@@ -45,6 +45,7 @@ pub static KIND: Kind = Kind {
     refresh,
     render,
     menu,
+    multi: Some(multi),
     double,
     button,
     csv: export_csv,
@@ -257,4 +258,47 @@ fn button(ctx: &Shared, id: &str) {
 fn export_csv(data: &ListData, shown: &[usize], _st: &ListState) -> Option<(&'static str, String)> {
     let ListData::Firewall(l, _, _) = data else { return None };
     Some(("keyhole-firewall", csv(&shown.iter().map(|&i| { let r = &l[i]; vec![if r.display.is_empty() { r.name.clone() } else { r.display.clone() }, r.name.clone(), r.group.clone(), r.direction.clone(), r.action.clone(), r.enabled.to_string(), r.protocol.clone(), r.local_ports.clone(), r.remote_ports.clone(), r.remote_addresses.clone(), r.program.clone(), r.service.clone(), r.profiles.clone(), r.description.clone()] }).collect::<Vec<_>>(), &["Rule", "Internal name", "Group", "Direction", "Action", "Enabled", "Protocol", "Local ports", "Remote ports", "Remote addresses", "Program", "Service", "Profiles", "Description"])))
+}
+
+fn multi(ctx: &Shared, srcs: &[usize], x: f32, y: f32) {
+    let rows: Vec<FirewallRow> = {
+        let st = ctx.st.borrow();
+        let ListData::Firewall(list, ..) = &st.lists.data else { return };
+        srcs.iter().filter_map(|&i| list.get(i).cloned()).collect()
+    };
+    if rows.is_empty() {
+        return;
+    }
+    let n = rows.len();
+    let label = |r: &FirewallRow| if r.display.is_empty() { r.name.clone() } else { r.display.clone() };
+    let to_enable: Vec<(String, Action)> = rows.iter().filter(|r| !r.enabled).map(|r| (label(r), Action::FirewallEnabled { key: fw_key(r), enabled: true })).collect();
+    let to_disable: Vec<(String, Action)> = rows.iter().filter(|r| r.enabled).map(|r| (label(r), Action::FirewallEnabled { key: fw_key(r), enabled: false })).collect();
+    let to_delete: Vec<(String, Action)> = rows.iter().map(|r| (label(r), Action::FirewallDelete(fw_key(r)))).collect();
+    let names: Vec<String> = rows.iter().take(6).map(label).collect();
+    let listing = if n > 6 { format!("{} and {} more", names.join(", "), n - 6) } else { names.join(", ") };
+    let items = vec![
+        MenuItem::new("enable", &format!("Enable {}", plural(to_enable.len(), "rule", "rules")), { let acts = to_enable.clone(); move |ctx| batch_action(ctx, acts, "Enabled", ("rule", "rules"), refresh_after("firewall")) }).disabled(to_enable.is_empty()),
+        MenuItem::new("disable", &format!("Disable {}", plural(to_disable.len(), "rule", "rules")), {
+            let acts = to_disable.clone();
+            let listing = listing.clone();
+            move |ctx| {
+                let acts = acts.clone();
+                dialogs::confirm(ctx, "Disable firewall rules?", &format!("This disables {}: {}. Traffic they were controlling will follow other rules or the default policy.", plural(acts.len(), "rule", "rules"), listing), "Disable", true, Box::new(move |ctx| batch_action(ctx, acts, "Disabled", ("rule", "rules"), refresh_after("firewall"))));
+            }
+        })
+        .danger()
+        .disabled(to_disable.is_empty()),
+        MenuItem::sep(),
+        MenuItem::new("copy", "Copy rule names", { let v = rows.iter().map(label).collect::<Vec<_>>().join("\n"); move |ctx| copy_text(ctx, &v) }),
+        MenuItem::sep(),
+        MenuItem::new("del", &format!("Delete {}", plural(n, "rule", "rules")), {
+            let acts = to_delete;
+            move |ctx| {
+                let acts = acts.clone();
+                dialogs::confirm(ctx, "Delete firewall rules?", &format!("This permanently removes {}: {}. Traffic they were controlling will follow other rules or the default policy.", plural(acts.len(), "rule", "rules"), listing), "Delete rules", true, Box::new(move |ctx| batch_action(ctx, acts, "Deleted", ("rule", "rules"), refresh_after("firewall"))));
+            }
+        })
+        .danger(),
+    ];
+    menus::show(ctx, x, y, &format!("{} selected", plural(n, "rule", "rules")), items);
 }
