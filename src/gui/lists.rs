@@ -481,17 +481,31 @@ pub fn render(ctx: &Shared) {
     let kinds::Rendered { chips, mut rows, shown, count, empty } = rendered;
     let u = ui(ctx);
     let old_rows = u.get_list_rows();
-    let previous_key = ctx.st.borrow().lists.sel.and_then(|i| old_rows.row_data(i)).map(|r| row_key(&r));
-    let multi_keys: std::collections::HashSet<String> = ctx.st.borrow().lists.multi.iter().filter_map(|&i| old_rows.row_data(i)).map(|r| row_key(&r)).collect();
+    let steady: Vec<bool> = defs(ctx, &kind).iter().map(|d| !d.num).collect();
+    let previous_key = ctx.st.borrow().lists.sel.and_then(|i| old_rows.row_data(i)).map(|r| row_key(&r, &steady));
+    let mut multi_budget: HashMap<String, usize> = HashMap::new();
+    for key in ctx.st.borrow().lists.multi.iter().filter_map(|&i| old_rows.row_data(i)).map(|r| row_key(&r, &steady)) {
+        *multi_budget.entry(key).or_default() += 1;
+    }
     let (sel, multi) = {
         let mut st = ctx.st.borrow_mut();
-        let moved = previous_key.as_ref().and_then(|k| rows.iter().position(|r| row_key(r) == *k));
+        let moved = previous_key.as_ref().and_then(|k| rows.iter().position(|r| row_key(r, &steady) == *k));
         st.lists.sel = match (moved, st.lists.sel) {
             (Some(i), _) => Some(i),
-            (None, Some(i)) if i < shown.len() && previous_key.is_none() => Some(i),
+            (None, Some(i)) if i < rows.len() && previous_key.is_none() => Some(i),
             _ => None,
         };
-        st.lists.multi = if multi_keys.is_empty() { BTreeSet::new() } else { rows.iter().enumerate().filter(|(_, r)| multi_keys.contains(&row_key(r))).map(|(i, _)| i).collect() };
+        st.lists.multi = rows
+            .iter()
+            .enumerate()
+            .filter_map(|(i, r)| match multi_budget.get_mut(&row_key(r, &steady)) {
+                Some(left) if *left > 0 => {
+                    *left -= 1;
+                    Some(i)
+                }
+                _ => None,
+            })
+            .collect();
         if st.lists.multi.len() < 2 {
             st.lists.multi.clear();
         }
@@ -526,12 +540,16 @@ pub fn render(ctx: &Shared) {
     }
 }
 
-fn row_key(r: &Row) -> String {
-    if r.tip.is_empty() {
-        r.cells.iter().take(3).map(|c| c.text.to_string()).collect::<Vec<_>>().join("\u{1F}")
-    } else {
-        format!("{}\u{1F}{}", r.tip, r.id)
-    }
+fn row_key(r: &Row, steady: &[bool]) -> String {
+    let cells = r
+        .cells
+        .iter()
+        .enumerate()
+        .filter(|(i, _)| steady.get(*i).copied().unwrap_or(true))
+        .map(|(_, c)| c.text.to_string())
+        .collect::<Vec<_>>()
+        .join("\u{1F}");
+    if r.tip.is_empty() { cells } else { format!("{}\u{1F}{}", r.tip, cells) }
 }
 
 pub fn nothing_matches(filter: &str) -> String {

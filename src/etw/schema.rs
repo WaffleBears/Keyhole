@@ -238,12 +238,16 @@ pub fn decode<'a>(record: &EVENT_RECORD, layout: &'a Layout) -> Decoded<'a> {
             },
             None => prop.fixed_length,
         };
+        if prop.in_type == IN_BINARY && prop.length_from.is_none() && fixed_length == 0 {
+            break;
+        }
         let (value, consumed) = unsafe {
             read_value(
                 data.add(offset),
                 remaining,
                 prop.in_type,
                 fixed_length,
+                prop.length_from.is_some(),
                 pointer_size,
             )
         };
@@ -263,6 +267,7 @@ unsafe fn read_value(
     remaining: usize,
     in_type: u16,
     fixed_length: u16,
+    counted: bool,
     pointer_size: usize,
 ) -> (Value, Option<usize>) {
     unsafe {
@@ -330,7 +335,7 @@ unsafe fn read_value(
                 (Value::None, Some(size))
             }
             IN_UNICODESTRING => {
-                if fixed_length > 0 {
+                if counted || fixed_length > 0 {
                     let bytes = fixed_length as usize * 2;
                     if !need(bytes) {
                         return (Value::None, None);
@@ -351,7 +356,7 @@ unsafe fn read_value(
                 (Value::Str(s), Some(consumed))
             }
             IN_ANSISTRING => {
-                if fixed_length > 0 {
+                if counted || fixed_length > 0 {
                     let bytes = fixed_length as usize;
                     if !need(bytes) {
                         return (Value::None, None);

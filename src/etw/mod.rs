@@ -361,7 +361,10 @@ impl Activity {
                 let handles = [trace];
                 let _ = unsafe { ProcessTrace(&handles, None, None) };
                 let _ = unsafe { CloseTrace(trace) };
-                let _ = me.running.compare_exchange(generation_id, 0, Ordering::SeqCst, Ordering::SeqCst);
+                if me.running.compare_exchange(generation_id, 0, Ordering::SeqCst, Ordering::SeqCst).is_ok() {
+                    let _ = me.fail("the kernel trace session stopped. Press Start to trace again".to_string());
+                    me.stop();
+                }
                 drop(unsafe { Box::from_raw(ctx_addr as *mut CallbackContext) });
             });
         if let Err(e) = reader {

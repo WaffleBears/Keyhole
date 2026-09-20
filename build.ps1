@@ -28,7 +28,7 @@ if ($missing.Count -gt 0) {
     Write-Host "Missing build prerequisites:"
     $missing | ForEach-Object { Write-Host "  $_" }
     if ($InstallPrereqs) {
-        if (-not (Test-Command winget)) { throw "winget is not available; install the prerequisites by hand" }
+        if (-not (Test-Command winget)) { throw "winget is not available. Install the prerequisites by hand" }
         foreach ($id in $installs) {
             Write-Host "winget install $id"
             Invoke-Expression "winget install --accept-source-agreements --accept-package-agreements -e --id $id"
@@ -50,7 +50,7 @@ $cargoArgs = @("build")
 if (-not $Debug) { $cargoArgs += "--release" }
 Write-Host "== cargo $($cargoArgs -join ' ')"
 if (-not (Test-Path (Join-Path $root "target\$profile\build"))) {
-    Write-Host "First build compiles Skia from source; expect 10 to 30 minutes."
+    Write-Host "First build compiles Skia from source. Expect 10 to 30 minutes."
 }
 Push-Location $root
 try { & cargo @cargoArgs } finally { Pop-Location }
@@ -92,7 +92,7 @@ function Get-ImportedDlls([byte[]]$b) {
 $imports = Get-ImportedDlls $bytes
 $dynamic = $imports | Where-Object { $_ -match '^(vcruntime|msvcp|api-ms-win-crt-|ucrtbase)' }
 if ($dynamic.Count -gt 0) {
-    throw "keyhole.exe imports the dynamic C runtime ($($dynamic -join ', ')); check .cargo\config.toml has +crt-static and that Skia was compiled from source"
+    throw "keyhole.exe imports the dynamic C runtime ($($dynamic -join ', ')). Check .cargo\config.toml has +crt-static and that Skia was compiled from source"
 }
 $unexpected = $imports | Where-Object { $_ -notmatch '^(kernel32|user32|gdi32|advapi32|shell32|ole32|oleaut32|ws2_32|iphlpapi|ntdll|crypt32|wintrust|netapi32|dnsapi|httpapi|iscsidsc|wevtapi|wtsapi32|secur32|bcrypt|d3d12|dxgi|dxguid|d3dcompiler|opengl32|imm32|uxtheme|dwmapi|shlwapi|comdlg32|comctl32|version|psapi|setupapi|winmm|usp10|msimg32|fwpuclnt|dbghelp|dwrite|bcryptprimitives|tdh|combase|powrprof|userenv|wldap32|winspool|cabinet|activeds|netutils|srvcli|wkscli|samcli|logoncli|mpr|dhcpcsvc|windows\.|api-ms-win-core|ext-ms-)' }
 if ($unexpected.Count -gt 0) { Write-Host "note: keyhole.exe also imports $($unexpected -join ', ')" }

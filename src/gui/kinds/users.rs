@@ -408,7 +408,7 @@ fn menu(ctx: &Shared, src: usize, x: f32, y: f32) {
             drop(st);
             let local_user = m.local && m.kind == "User";
             let short = m.member.split('\\').next_back().unwrap_or("").to_string();
-            let well_known = m.sid.starts_with("S-1-1") || m.sid.starts_with("S-1-5-32") || m.sid == "S-1-5-18" || m.sid == "S-1-5-19" || m.sid == "S-1-5-20";
+            let well_known = m.sid.starts_with("S-1-1-") || m.sid.starts_with("S-1-5-32") || m.sid == "S-1-5-18" || m.sid == "S-1-5-19" || m.sid == "S-1-5-20";
             let domain_group = !m.local && m.kind == "Group";
             let items = vec![
                 MenuItem::new("copy", "Copy member", { let v = m.member.clone(); move |ctx| copy_text(ctx, &v) }),

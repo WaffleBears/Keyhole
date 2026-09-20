@@ -42,7 +42,7 @@ impl IconCache {
     }
 
     pub fn id_for(&self, path: &str) -> u32 {
-        if path.is_empty() || !local_path(path) {
+        if path.is_empty() || !super::local_path(path) {
             return self.generic_id();
         }
         let key = path.to_lowercase();
@@ -65,7 +65,7 @@ impl IconCache {
         id
     }
 
-    pub fn take_new(&self, since: usize) -> Vec<(u32, Vec<u8>)> {
+    pub fn take_new(&self, since: usize) -> (Vec<(u32, Vec<u8>)>, usize) {
         let data = self.data.lock();
         let mut out = Vec::new();
         for i in since.max(1)..data.len() {
@@ -73,30 +73,12 @@ impl IconCache {
                 out.push((i as u32, data[i].clone()));
             }
         }
-        out
+        (out, data.len())
     }
 
     pub fn len(&self) -> usize {
         self.data.lock().len()
     }
-}
-
-static DRIVE_KINDS: Mutex<Vec<(u8, bool)>> = Mutex::new(Vec::new());
-
-fn local_path(path: &str) -> bool {
-    let b = path.as_bytes();
-    if path.starts_with("\\\\") || b.len() < 3 || !b[0].is_ascii_alphabetic() || b[1] != b':' {
-        return false;
-    }
-    let letter = b[0].to_ascii_uppercase();
-    if let Some((_, local)) = DRIVE_KINDS.lock().iter().find(|(l, _)| *l == letter) {
-        return *local;
-    }
-    let root = wide(&format!("{}:\\", letter as char));
-    let kind = unsafe { windows::Win32::Storage::FileSystem::GetDriveTypeW(PCWSTR(root.as_ptr())) };
-    let local = kind == 3 || kind == 6;
-    DRIVE_KINDS.lock().push((letter, local));
-    local
 }
 
 fn extract_png(path: &str, by_attributes: bool) -> Option<Vec<u8>> {

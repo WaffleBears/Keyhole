@@ -29,7 +29,7 @@ pub struct EventsUi {
     pub all_logs: bool,
     pub seq: u64,
     pub since_frozen: Vec<EventRow>,
-    pub fresh: HashMap<u64, u64>,
+    pub fresh: HashMap<(String, u64), u64>,
 }
 
 impl Default for EventsUi {
@@ -193,7 +193,7 @@ fn render(ctx: &Shared, data: &ListData, input: &RenderInput) -> Rendered {
         .iter()
         .map(|&i| {
             let r = &d.rows[i];
-            let is_fresh = fresh.get(&r.record_id).map(|t| ticks.saturating_sub(*t) < 2).unwrap_or(false);
+            let is_fresh = fresh.get(&(r.log.clone(), r.record_id)).map(|t| ticks.saturating_sub(*t) < 2).unwrap_or(false);
             let mut row = simple_row(
                 i as i32,
                 vec![
@@ -356,7 +356,7 @@ pub fn tick(ctx: &Shared) {
             };
             let pending: Vec<EventRow> = st.lists.events.since_frozen.drain(..).chain(rows).filter(|r| !known.contains(&(r.log.clone(), r.record_id))).collect();
             for r in &pending {
-                st.lists.events.fresh.insert(r.record_id, ticks);
+                st.lists.events.fresh.insert((r.log.clone(), r.record_id), ticks);
             }
             if let ListData::Events(d) = &mut st.lists.data {
                 let keep = d.rows.len().max(MAX_ROWS);

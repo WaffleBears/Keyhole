@@ -48,6 +48,34 @@ pub fn critical_guard(pid: u32, name: &str, verb: &str) -> Result<(), String> {
     Ok(())
 }
 
+pub fn creation_time(pid: u32) -> Option<i64> {
+    use windows::Win32::Foundation::FILETIME;
+    use windows::Win32::System::Threading::GetProcessTimes;
+    unsafe {
+        let h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid).ok()?;
+        let mut created = FILETIME::default();
+        let mut exit = FILETIME::default();
+        let mut kernel = FILETIME::default();
+        let mut user = FILETIME::default();
+        let ok = GetProcessTimes(h, &mut created, &mut exit, &mut kernel, &mut user).is_ok();
+        let _ = CloseHandle(h);
+        if !ok {
+            return None;
+        }
+        Some(((created.dwHighDateTime as i64) << 32) | created.dwLowDateTime as i64)
+    }
+}
+
+pub fn still_same_process(pid: u32, started: i64, verb: &str) -> Result<(), String> {
+    if started <= 0 {
+        return Ok(());
+    }
+    match creation_time(pid) {
+        Some(now) if now != started => Err(format!("pid {} is not the process Keyhole listed any more, so it was not {}. Refresh and try again", pid, verb)),
+        _ => Ok(()),
+    }
+}
+
 pub fn terminate(pid: u32) -> Result<(), String> {
     if pid == 0 || pid == 4 {
         return Err("refusing to terminate a kernel process".into());

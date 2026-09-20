@@ -383,14 +383,14 @@ fn fetch_icons(ctx: &Shared) {
     spawn(
         ctx,
         move |app| {
-            let raw = api::new_icons(app, since);
+            let (raw, count) = api::new_icons(app, since);
             let mut out = Vec::new();
             for (id, bytes) in raw {
                 if let Some(img) = decode_png(&bytes) {
                     out.push((id, img));
                 }
             }
-            (out, app.icons.len())
+            (out, count)
         },
         |ctx, (icons, count)| {
             {

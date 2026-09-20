@@ -63,6 +63,24 @@ impl Drop for SecretWide {
     }
 }
 
+static DRIVE_KINDS: parking_lot::Mutex<Vec<(u8, bool)>> = parking_lot::Mutex::new(Vec::new());
+
+pub fn local_path(path: &str) -> bool {
+    let b = path.as_bytes();
+    if path.starts_with("\\\\") || b.len() < 3 || !b[0].is_ascii_alphabetic() || b[1] != b':' {
+        return false;
+    }
+    let letter = b[0].to_ascii_uppercase();
+    if let Some((_, local)) = DRIVE_KINDS.lock().iter().find(|(l, _)| *l == letter) {
+        return *local;
+    }
+    let root = wide(&format!("{}:\\", letter as char));
+    let kind = unsafe { windows::Win32::Storage::FileSystem::GetDriveTypeW(windows::core::PCWSTR(root.as_ptr())) };
+    let local = kind == 3 || kind == 6;
+    DRIVE_KINDS.lock().push((letter, local));
+    local
+}
+
 pub fn from_wide(buf: &[u16]) -> String {
     let end = buf.iter().position(|&c| c == 0).unwrap_or(buf.len());
     OsString::from_wide(&buf[..end]).to_string_lossy().into_owned()

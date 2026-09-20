@@ -35,6 +35,7 @@ pub fn list() -> Vec<DriverRow> {
         let ver = if path.is_empty() { Default::default() } else { crate::sys::version::read(&path) };
         let (state, running) = match states.get(&name.to_lowercase()) {
             Some((s, _)) => (services::state_text(*s).to_string(), *s == 4),
+            None if states.is_empty() => ("Unknown".to_string(), false),
             None => ("Not registered".to_string(), false),
         };
         out.push(DriverRow {

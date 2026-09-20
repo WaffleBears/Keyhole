@@ -152,7 +152,7 @@ export component Doc inherits Rectangle {
                     for b[bi] in it.badges: Rectangle {
                         width: bv.width;
                         height: bv.height;
-                        bv := BadgeView { badge: b; }
+                        bv := BadgeView { badge: b; tone: it.kind == 7 ? 1 : -1; }
                         if it.kind == 7: TouchArea { mouse-cursor: pointer; clicked => { root.jump(b.kind); } }
                     }
                 }

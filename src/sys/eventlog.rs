@@ -435,6 +435,9 @@ fn query_with(fmt: &mut Formatter, channel: &str, xpath: &str, cap: usize) -> Re
         let mut returned = 0u32;
         let r = unsafe { EvtNext(handle.0, &mut batch, 5000, 0, &mut returned) };
         if let Err(e) = r {
+            for &h in batch.iter().take(returned as usize) {
+                drop(Handle(EVT_HANDLE(h)));
+            }
             if e.code() == ERROR_NO_MORE_ITEMS.to_hresult() || returned == 0 {
                 break;
             }

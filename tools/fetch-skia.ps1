@@ -24,7 +24,7 @@ if (-not $crate) {
     try { cargo fetch } finally { Pop-Location }
     $crate = Find-Crate
 }
-if (-not $crate) { throw "skia-bindings is not in the cargo registry; cargo fetch failed?" }
+if (-not $crate) { throw "skia-bindings is not in the cargo registry. Did cargo fetch fail?" }
 $tag = (Select-String -Path (Join-Path $crate.FullName "Cargo.toml") -Pattern '^skia = "(.+)"').Matches[0].Groups[1].Value
 $stamp = Join-Path $dest ".keyhole-skia-tag"
 
@@ -82,7 +82,7 @@ Write-Host "Unpacking into $dest"
 python $script $tar $dest
 if ($LASTEXITCODE -ne 0) {
     Remove-Item -Force $tar -ErrorAction SilentlyContinue
-    throw "unpacking Skia failed; the downloaded archive was discarded, run again to fetch it afresh"
+    throw "unpacking Skia failed. The downloaded archive was discarded, run again to fetch it afresh"
 }
 
 Write-Host "Syncing Skia third-party dependencies"

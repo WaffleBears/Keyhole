@@ -182,7 +182,7 @@ pub fn csv(rows: &[Vec<String>], header: &[&str]) -> String {
         };
         if formula {
             format!("\"'{}\"", s.replace('"', "\"\""))
-        } else if s.contains(',') || s.contains('"') || s.contains('\n') {
+        } else if s.contains(',') || s.contains('"') || s.contains('\n') || s.contains('\r') {
             format!("\"{}\"", s.replace('"', "\"\""))
         } else {
             s.to_string()

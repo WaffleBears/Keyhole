@@ -474,7 +474,7 @@ pub fn stop_activity(app: &App) {
     app.refresh_tree();
 }
 
-pub fn new_icons(app: &App, since: usize) -> Vec<(u32, Vec<u8>)> {
+pub fn new_icons(app: &App, since: usize) -> (Vec<(u32, Vec<u8>)>, usize) {
     app.icons.take_new(since)
 }
 
@@ -521,7 +521,7 @@ pub enum Action {
     KillTree(u32),
     Suspend(u32),
     Resume(u32),
-    CloseHandle { pid: u32, handle: u64 },
+    CloseHandle { pid: u32, handle: u64, object: u64 },
     CloseFileHandles(String),
     Reveal(String),
     OpenFolder(String),
@@ -558,26 +558,43 @@ pub enum Action {
 }
 
 pub fn run(app: &App, action: Action) -> Result<(), String> {
+    let touches_tree = matches!(
+        action,
+        Action::Terminate(_) | Action::KillTree(_) | Action::Suspend(_) | Action::Resume(_) | Action::Restart(_) | Action::Service { .. } | Action::Uninstall(_) | Action::SessionLogoff(_)
+    );
     let result = match action {
-        Action::Terminate(pid) => actions::critical_guard(pid, &app.tree.load().name_of(pid), "terminate").and_then(|_| actions::terminate(pid)),
+        Action::Terminate(pid) => {
+            let tree = app.tree.load();
+            actions::critical_guard(pid, &tree.name_of(pid), "terminate")
+                .and_then(|_| actions::still_same_process(pid, tree.started_at(pid), "terminated"))
+                .and_then(|_| actions::terminate(pid))
+        }
         Action::KillTree(pid) => {
             let tree = app.tree.load();
             let members = app.descendants(pid);
             for p in &members {
                 actions::critical_guard(*p, &tree.name_of(*p), "terminate").map_err(|e| format!("nothing was terminated: {}", e))?;
+                actions::still_same_process(*p, tree.started_at(*p), "terminated").map_err(|e| format!("nothing was terminated: {}", e))?;
             }
             let mut errors = Vec::new();
             for p in members.iter().rev() {
-                if let Err(e) = actions::terminate(*p) {
+                if let Err(e) = actions::still_same_process(*p, tree.started_at(*p), "terminated").and_then(|_| actions::terminate(*p)) {
                     errors.push(format!("pid {}: {}", p, e));
                 }
             }
             if errors.is_empty() { Ok(()) } else { Err(errors.join(". ")) }
         }
         Action::Suspend(pid) if pid == std::process::id() => Err("Keyhole cannot suspend itself".into()),
-        Action::Suspend(pid) => actions::critical_guard(pid, &app.tree.load().name_of(pid), "suspend").and_then(|_| actions::suspend(pid)),
+        Action::Suspend(pid) => {
+            let tree = app.tree.load();
+            actions::critical_guard(pid, &tree.name_of(pid), "suspend")
+                .and_then(|_| actions::still_same_process(pid, tree.started_at(pid), "suspended"))
+                .and_then(|_| actions::suspend(pid))
+        }
         Action::Resume(pid) => actions::resume(pid),
-        Action::CloseHandle { pid, handle } => actions::critical_guard(pid, &app.tree.load().name_of(pid), "close a handle inside").and_then(|_| actions::close_handle(pid, handle)),
+        Action::CloseHandle { pid, handle, object } => actions::critical_guard(pid, &app.tree.load().name_of(pid), "close a handle inside")
+            .and_then(|_| if still_open(&crate::sys::handles::scan_raw(), pid, handle, object) { Ok(()) } else { Err("that handle is already gone, so nothing was closed. Refresh and try again".to_string()) })
+            .and_then(|_| actions::close_handle(pid, handle)),
         Action::CloseFileHandles(path) => close_file_handles(app, &path),
         Action::Reveal(path) => actions::reveal_in_explorer(&path),
         Action::OpenFolder(path) => actions::open_containing_folder(&path),
@@ -612,22 +629,33 @@ pub fn run(app: &App, action: Action) -> Result<(), String> {
         Action::UserUnlock(name) => crate::sys::accounts::unlock(&name),
         Action::RemoveGroupMember { group, sid, .. } => crate::sys::accounts::remove_member(&group, &sid),
     };
-    if result.is_ok() {
+    if result.is_ok() && touches_tree {
         app.refresh_tree();
     }
     result
 }
 
+fn still_open(raw: &[crate::sys::handles::RawHandle], pid: u32, handle: u64, object: u64) -> bool {
+    if object == 0 {
+        return true;
+    }
+    raw.iter().any(|h| h.pid == pid && h.value == handle && h.object == object)
+}
+
 fn close_file_handles(app: &App, path: &str) -> Result<(), String> {
     let path = path.to_lowercase().replace('/', "\\");
     let res = app.search(&path, false);
-    let targets: Vec<(u32, u64, String)> = res.rows.iter().filter(|r| r.type_name == "File" && r.display.to_lowercase() == path).map(|r| (r.pid, r.handle, r.process.clone())).collect();
-    for (pid, _, process) in &targets {
+    let targets: Vec<(u32, u64, u64, String)> = res.rows.iter().filter(|r| r.type_name == "File" && r.display.to_lowercase() == path).map(|r| (r.pid, r.handle, r.object, r.process.clone())).collect();
+    for (pid, _, _, process) in &targets {
         actions::critical_guard(*pid, process, "close a handle inside").map_err(|e| format!("nothing was closed: {}", e))?;
     }
+    let raw = crate::sys::handles::scan_raw();
     let mut closed = 0usize;
     let mut errors = Vec::new();
-    for (pid, handle, process) in &targets {
+    for (pid, handle, object, process) in &targets {
+        if !still_open(&raw, *pid, *handle, *object) {
+            continue;
+        }
         match actions::close_handle(*pid, *handle) {
             Ok(()) => closed += 1,
             Err(e) => errors.push(format!("{} (pid {}): {}", process, pid, e)),
@@ -648,6 +676,7 @@ fn restart(app: &App, pid: u32) -> Result<(), String> {
     }
     let info = app.tree.load().procs.get(&pid).cloned().ok_or_else(|| "process not found".to_string())?;
     actions::critical_guard(pid, &info.name, "restart")?;
+    actions::still_same_process(pid, info.create_time, "restarted")?;
     let d = app.details.get(pid, info.create_time, true);
     let image = if d.image_path.is_empty() { info.image_path.clone() } else { d.image_path.clone() };
     let cmdline = if d.command_line.is_empty() { info.command_line.clone() } else { d.command_line.clone() };

@@ -160,7 +160,7 @@ fn multi(ctx: &Shared, srcs: &[usize], x: f32, y: f32) {
         return;
     }
     let n = rows.len();
-    let close: Vec<(String, keyhole::api::Action)> = rows.iter().map(|r| (format!("{} in {}", r.display, r.process), keyhole::api::Action::CloseHandle { pid: r.pid, handle: r.handle })).collect();
+    let close: Vec<(String, keyhole::api::Action)> = rows.iter().map(|r| (format!("{} in {}", r.display, r.process), keyhole::api::Action::CloseHandle { pid: r.pid, handle: r.handle, object: r.object })).collect();
     let items = vec![
         MenuItem::new("copy", "Copy names", { let v = rows.iter().map(|r| r.display.clone()).collect::<Vec<_>>().join("\n"); move |ctx| copy_text(ctx, &v) }),
         MenuItem::sep(),

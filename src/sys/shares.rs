@@ -91,9 +91,30 @@ pub fn enum_all<T, R>(mut call: impl FnMut(*mut *mut u8, &mut u32, &mut u32) -> 
                 NetApiBufferFree(Some(buf as *const _));
             }
         }
-        if rc != 234 {
+        if rc != 234 || read == 0 {
             break;
         }
+    }
+    Ok(out)
+}
+
+pub fn enum_once<T, R>(call: impl FnOnce(*mut *mut u8, &mut u32, &mut u32) -> u32, convert: impl Fn(&T) -> R) -> Result<Vec<R>, u32> {
+    let mut out = Vec::new();
+    let mut buf: *mut u8 = std::ptr::null_mut();
+    let mut read = 0u32;
+    let mut total = 0u32;
+    let rc = call(&mut buf, &mut read, &mut total);
+    if !buf.is_null() {
+        if rc == 0 || rc == 234 {
+            let items = unsafe { std::slice::from_raw_parts(buf as *const T, read as usize) };
+            out.extend(items.iter().map(&convert));
+        }
+        unsafe {
+            NetApiBufferFree(Some(buf as *const _));
+        }
+    }
+    if rc != 0 && rc != 234 {
+        return Err(rc);
     }
     Ok(out)
 }

@@ -438,7 +438,7 @@ fn analyze_kernel(path: &Path, b: &[u8], file_size: u64) -> Result<DumpReport, S
     let mut rip = 0u64;
     let mut exception_code = 0u32;
     let mut exception_addr = 0u64;
-    if is64 && b.len() > 0x2000 + 0x60 {
+    if is64 && matches!(dump_type, 4 | 5) && b.len() > 0x2000 + 0x60 {
         let t = 0x2000;
         let context_off = u32_at(b, t + 0x0C).unwrap_or(0) as usize;
         let exception_off = u32_at(b, t + 0x10).unwrap_or(0) as usize;

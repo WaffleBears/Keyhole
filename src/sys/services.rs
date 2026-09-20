@@ -149,7 +149,10 @@ unsafe fn wait_stopped(svc: SC_HANDLE) -> bool {
     unsafe {
         for _ in 0..300 {
             let mut status = SERVICE_STATUS::default();
-            if QueryServiceStatus(svc, &mut status).is_err() || status.dwCurrentState == SERVICE_STOPPED {
+            if QueryServiceStatus(svc, &mut status).is_err() {
+                return false;
+            }
+            if status.dwCurrentState == SERVICE_STOPPED {
                 return true;
             }
             std::thread::sleep(std::time::Duration::from_millis(100));
@@ -436,7 +439,7 @@ unsafe fn read_pwstr(p: *const u16) -> String {
     }
     unsafe {
         let mut len = 0usize;
-        while *p.add(len) != 0 && len < 8192 {
+        while len < 8192 && *p.add(len) != 0 {
             len += 1;
         }
         from_wide(std::slice::from_raw_parts(p, len))

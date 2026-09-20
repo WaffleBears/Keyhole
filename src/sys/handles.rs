@@ -245,7 +245,6 @@ impl Guard {
                     out.stats.threads_abandoned += 1;
                     out.newly_blocked.push(s.key);
                     out.names.insert(s.key, None);
-                    unsafe { let _ = CloseHandle(s.dup); }
                 }
             }
         }

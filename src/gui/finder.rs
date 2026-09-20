@@ -21,7 +21,8 @@ pub struct FinderState {
 }
 
 pub fn writes(access: &str) -> bool {
-    ["WriteData", "AppendData", "GenericWrite", "AllAccess", "Delete"].iter().any(|w| access.contains(w))
+    const WRITERS: [&str; 8] = ["WriteData", "AppendData", "WriteEA", "WriteAttr", "SetValue", "CreateSubKey", "GenericWrite", "AllAccess"];
+    access.split(", ").any(|token| token == "Delete" || WRITERS.contains(&token))
 }
 
 pub fn wire(ctx: &Shared) {

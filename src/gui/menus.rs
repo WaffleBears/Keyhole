@@ -138,6 +138,7 @@ pub fn handle_menu(ctx: &Shared, x: f32, y: f32, row: &HandleRow) {
     let searchable = row.type_name == "File" || is_key || is_file;
     let pid = row.pid;
     let handle = row.handle;
+    let object = row.object;
     let process = if row.process.is_empty() { format!("pid {}", row.pid) } else { row.process.clone() };
     let items = vec![
         MenuItem::new("copyPath", if is_file || is_key { "Copy path" } else { "Copy name" }, { let p = path.clone(); move |ctx| copy_text(ctx, &p) }).disabled(path.is_empty()),
@@ -166,7 +167,7 @@ pub fn handle_menu(ctx: &Shared, x: f32, y: f32, row: &HandleRow) {
                     &format!("Keyhole will reach into {} and close its handle to {}. That process is not told. A file being written can end up corrupted, or the program can crash. Terminating the process is usually safer.", process, p),
                     "Close the handle",
                     true,
-                    Box::new(move |ctx| do_action(ctx, Action::CloseHandle { pid, handle }, "Handle closed")),
+                    Box::new(move |ctx| do_action(ctx, Action::CloseHandle { pid, handle, object }, "Handle closed")),
                 );
             }
         })

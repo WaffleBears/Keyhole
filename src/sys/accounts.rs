@@ -1,4 +1,4 @@
-use super::shares::{enum_all, net_error};
+use super::shares::{enum_all, enum_once, net_error};
 use super::{pw, wide};
 use windows::Win32::NetworkManagement::NetManagement::{FILTER_NORMAL_ACCOUNT, LOCALGROUP_MEMBERS_INFO_3, NetLocalGroupAddMembers, USER_INFO_1003, GROUP_USERS_INFO_0, LG_INCLUDE_INDIRECT, LOCALGROUP_INFO_1, LOCALGROUP_MEMBERS_INFO_0, LOCALGROUP_MEMBERS_INFO_2, LOCALGROUP_USERS_INFO_0, NETSETUP_JOIN_STATUS, NetApiBufferFree, NetGetJoinInformation, NetGroupGetUsers, NetLocalGroupDelMembers, NetLocalGroupEnum, NetLocalGroupGetMembers, NetSetupDomainName, NetUserEnum, NetUserGetInfo, NetUserGetLocalGroups, NetUserSetInfo, UF_ACCOUNTDISABLE, UF_DONT_EXPIRE_PASSWD, UF_LOCKOUT, UF_PASSWD_CANT_CHANGE, UF_PASSWD_NOTREQD, USER_INFO_0, USER_INFO_1008, USER_INFO_4};
 use windows::Win32::Security::Authorization::ConvertStringSidToSidW;
@@ -361,7 +361,7 @@ pub fn lookup_account(name: &str) -> Result<UserRow, String> {
     let query = if local { short.clone() } else { full.clone() };
     let mut row = UserRow { name: if local { short.clone() } else { full.clone() }, sid: found.sid.clone(), enabled: true, password_required: true, domain: !local, ..Default::default() };
     let w = wide(&query);
-    let groups = enum_all(|buf, read, total| unsafe { NetUserGetLocalGroups(PCWSTR::null(), PCWSTR(w.as_ptr()), 0, LG_INCLUDE_INDIRECT, buf, u32::MAX, read, total) }, |g: &LOCALGROUP_USERS_INFO_0| pw(g.lgrui0_name));
+    let groups = enum_once(|buf, read, total| unsafe { NetUserGetLocalGroups(PCWSTR::null(), PCWSTR(w.as_ptr()), 0, LG_INCLUDE_INDIRECT, buf, u32::MAX, read, total) }, |g: &LOCALGROUP_USERS_INFO_0| pw(g.lgrui0_name));
     match groups {
         Ok(list) => {
             row.admin = list.iter().any(|g| g.eq_ignore_ascii_case(administrators_group()));

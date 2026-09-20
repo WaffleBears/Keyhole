@@ -11,6 +11,7 @@ use std::sync::Arc;
 
 #[derive(Default)]
 pub struct ActivityState {
+    pub busy: bool,
     pub layer: String,
     pub snapshot: Option<Arc<ActivitySnapshot>>,
     pub board: Vec<BoardSrc>,
@@ -213,10 +214,15 @@ pub fn enter_activity(ctx: &Shared) {
 pub fn refresh_activity(ctx: &Shared) {
     let token = {
         let mut st = ctx.st.borrow_mut();
+        if st.activity.busy {
+            return;
+        }
+        st.activity.busy = true;
         st.activity.token += 1;
         st.activity.token
     };
     spawn(ctx, |app| (api::activity(app), api::tree(app)), move |ctx, (a, tree)| {
+        ctx.st.borrow_mut().activity.busy = false;
         if ctx.st.borrow().mode != "activity" || ctx.st.borrow().activity.token != token {
             return;
         }
@@ -313,6 +319,10 @@ pub fn enter_network(ctx: &Shared) {
 pub fn refresh_network(ctx: &Shared) {
     let token = {
         let mut st = ctx.st.borrow_mut();
+        if st.activity.busy {
+            return;
+        }
+        st.activity.busy = true;
         st.activity.token += 1;
         st.activity.token
     };
@@ -321,6 +331,7 @@ pub fn refresh_network(ctx: &Shared) {
         (st.lists.net_resolve, st.lists.filter.get("network").cloned().unwrap_or_default())
     };
     spawn(ctx, move |app| (api::activity(app), api::connections(app, resolve, &filter)), move |ctx, (a, conn)| {
+        ctx.st.borrow_mut().activity.busy = false;
         if ctx.st.borrow().mode != "network" || ctx.st.borrow().activity.token != token {
             return;
         }

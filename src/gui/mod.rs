@@ -94,6 +94,7 @@ where
                         st.lists.inflight = false;
                         st.lists.updates_installing = false;
                         st.resources.busy = false;
+                        st.activity.busy = false;
                         st.tree.live_busy = false;
                     }
                     let u = ui(&ctx2);

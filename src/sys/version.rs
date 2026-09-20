@@ -31,7 +31,7 @@ impl VersionCache {
     }
 
     pub fn get(&self, path: &str) -> VersionInfo {
-        if path.is_empty() {
+        if path.is_empty() || !crate::sys::local_path(path) {
             return VersionInfo::default();
         }
         let key = path.to_lowercase();

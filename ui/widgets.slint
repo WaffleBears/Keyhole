@@ -265,7 +265,9 @@ export component EmptyState inherits Rectangle {
 
 export component BadgeView inherits Rectangle {
     in property <Badge> badge;
-    property <color> fg: badge.kind == 1 ? Theme.blue : badge.kind == 2 ? Theme.warn : badge.kind == 3 ? Theme.muted : badge.kind == 4 ? Theme.bad : badge.kind == 5 ? Theme.good : badge.kind == 6 ? Theme.warn : badge.kind == 7 ? Theme.bad : badge.kind == 8 ? Theme.accent : badge.kind == 9 ? Theme.blue : badge.kind == 10 ? Theme.good : Theme.muted;
+    in property <int> tone: -1;
+    property <int> kind: root.tone >= 0 ? root.tone : badge.kind;
+    property <color> fg: root.kind == 1 ? Theme.blue : root.kind == 2 ? Theme.warn : root.kind == 3 ? Theme.muted : root.kind == 4 ? Theme.bad : root.kind == 5 ? Theme.good : root.kind == 6 ? Theme.warn : root.kind == 7 ? Theme.bad : root.kind == 8 ? Theme.accent : root.kind == 9 ? Theme.blue : root.kind == 10 ? Theme.good : Theme.muted;
     height: 18px;
     width: t.preferred-width + 12px;
     border-radius: 5px;

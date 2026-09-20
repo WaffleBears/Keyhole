@@ -122,6 +122,10 @@ impl TreeSnapshot {
             _ => format!("pid {}", pid),
         }
     }
+
+    pub fn started_at(&self, pid: u32) -> i64 {
+        self.procs.get(&pid).map(|p| p.create_time).unwrap_or(0)
+    }
 }
 
 pub struct App {
